@@ -1,74 +1,71 @@
-# 🚀 Deployment Instructions for Project Sanjaya
+# 🚀 Vercel Deployment Instructions
 
-To make Project Sanjaya accessible from anywhere, you need to deploy its two main components: the **Flask Backend** and the **Streamlit Dashboard**.
-
----
-
-## 1. Deploying the Flask Backend
-
-The Flask backend needs to be deployed to a web hosting service so that your mobile phone can access it from any network. A service like **Render** or **Heroku** is a good choice.
-
-### Using Render (Recommended)
-
-1.  **Sign up for a free account on [Render](https://render.com/).**
-2.  **Create a `gunicorn` entry in `requirements.txt`**:
-    Render uses Gunicorn to serve Flask apps. Add it to your `requirements.txt`:
-    ```
-    streamlit
-    streamlit-folium
-    geocoder
-    requests
-    python-dotenv
-    Flask
-    gunicorn
-    ```
-3.  **Create a New Web Service on Render**:
-    *   Go to your Dashboard and click "New" -> "Web Service".
-    *   Connect your GitHub repository where this project is stored.
-4.  **Configure the Service**:
-    *   **Name**: Give your service a name (e.g., `sanjaya-tracker-backend`).
-    *   **Region**: Choose a region close to you.
-    *   **Branch**: Select your main branch.
-    *   **Build Command**: `pip install -r requirements.txt` (this is usually the default).
-    *   **Start Command**: `gunicorn main:app`
-5.  **Add Environment Variables**:
-    *   Go to the "Environment" tab for your new service.
-    *   Add a new secret file.
-    *   **Filename**: `.env`
-    *   **Contents**:
-        ```
-        AVIATIONSTACK_KEY="YOUR_REAL_API_KEY"
-        ```
-6.  **Deploy**:
-    *   Click "Create Web Service". Render will build and deploy your app.
-    *   Once deployed, you will get a public URL (e.g., `https://sanjaya-tracker-backend.onrender.com`). **This is the URL you will use on your phone.**
+This guide will walk you through deploying both the **Flask Backend** and the **Streamlit Dashboard** to make Project Sanjaya publicly accessible.
 
 ---
 
-## 2. Deploying the Streamlit Dashboard
+### Part 1: Deploying the Backend to Vercel
 
-The Streamlit dashboard is best deployed using **Streamlit Community Cloud**.
+1.  **Create a Vercel Account & Connect GitHub:**
+    *   Sign up for a free account at [vercel.com](https://vercel.com).
+    *   Connect your GitHub account and import the `project_sanjaya` repository.
 
-1.  **Sign up for a free account on [Streamlit Community Cloud](https://streamlit.io/cloud).**
-2.  **Push your code to a public GitHub repository.** (Streamlit Cloud requires this).
-3.  **Deploy from Streamlit Cloud**:
-    *   From your workspace, click "New app".
-    *   Select the repository and branch you want to deploy.
-    *   **Main file path**: `dashboard/app.py`
-    *   Give your app a custom URL.
-4.  **Important: Update the Backend URL**:
-    The Streamlit app doesn't directly connect to the backend, but it's good practice to know where your backend is. The key is that the **phone** must be able to reach the **backend's public URL**.
-5.  **Deploy**:
+2.  **Configure the Project:**
+    *   Vercel will automatically detect the Python backend using the `vercel.json` file.
+    *   Before deploying, go to the "Settings" tab for your new project.
+    *   Click on "Environment Variables".
+    *   Add your `AVIATIONSTACK_KEY` as a secret. Vercel will use the `.env` file for local development, but needs this for deployment.
+        *   **Key:** `AVIATIONSTACK_KEY`
+        *   **Value:** `YOUR_AVIATIONSTACK_KEY_HERE`
+
+3.  **Deploy:**
+    *   Go to the "Deployments" tab and trigger a new deployment for your main branch.
+    *   Vercel will build and deploy your application. Once complete, you will get a public URL (e.g., `https://sanjaya-backend.vercel.app`). This is your **Backend URL**.
+
+4.  **Set Up the Cron Job:**
+    *   Navigate back to your project's `vercel.json` file in your code editor.
+    *   Add the following `crons` section to the file. This tells Vercel to call your `/update_status` endpoint every 15 minutes.
+
+    ```json
+    {
+        "version": 2,
+        "builds": [
+            { "src": "main.py", "use": "@vercel/python" }
+        ],
+        "routes": [
+            { "src": "/(.*)", "dest": "main.py" }
+        ],
+        "crons": [
+            {
+                "path": "/update_status",
+                "schedule": "*/15 * * * *"
+            }
+        ]
+    }
+    ```
+    *   Commit and push this change to your GitHub repository. Vercel will automatically redeploy, and your cron job will be active.
+
+---
+
+### Part 2: Deploying the Dashboard to Streamlit Community Cloud
+
+1.  **Create a Streamlit Cloud Account:**
+    *   Sign up for a free account at [streamlit.io/cloud](https://streamlit.io/cloud).
+    *   Connect the same GitHub repository.
+
+2.  **Deploy the App:**
+    *   Click "New app" and select your repository.
+    *   Set the **Main file path** to `project_sanjaya/dashboard/app.py`.
+    *   In the "Advanced settings", add the following secret:
+        *   **Key:** `BACKEND_URL`
+        *   **Value:** Your **Backend URL** from Vercel (e.g., `https://sanjaya-backend.vercel.app`)
+
+3.  **Deploy:**
     *   Click "Deploy!". Your dashboard will be live in a few minutes.
 
 ---
 
-## 🏁 Final Steps
+### Final Workflow
 
-1.  **Start a tracking session**:
-    *   Navigate to your public **Flask backend URL** on your mobile phone (e.g., `https://sanjaya-tracker-backend.onrender.com`).
-    *   Enter your details and start tracking.
-2.  **View the dashboard**:
-    *   Open your public **Streamlit dashboard URL** on any device to see the live tracking in action.
-
-Your tracker is now live and accessible globally!
+*   To start a new trip, go to your **Vercel Backend URL**.
+*   To view the live dashboard, go to your **Streamlit Cloud URL**.

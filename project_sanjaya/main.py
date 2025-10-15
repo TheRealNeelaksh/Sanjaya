@@ -1,7 +1,6 @@
 import os
 import json
 import sys
-import time
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, jsonify
 import uuid
@@ -14,8 +13,8 @@ from jules.utils import check_airport_proximity, haversine_distance
 
 # --- Constants & Configuration ---
 app = Flask(__name__, template_folder='templates')
-TRIP_INFO_PATH = "logs/trip_info.json"
-TRIP_LOG_PATH = "logs/trip_log.json"
+TRIP_INFO_PATH = "/tmp/trip_info.json" # Vercel uses a /tmp directory for temporary file storage
+TRIP_LOG_PATH = "/tmp/trip_log.json"
 
 # --- Trip Management Endpoints ---
 
@@ -87,36 +86,39 @@ def reset_trip():
     print("Trip data has been reset.")
     return jsonify({"status": "success"})
 
-# --- Time-Based Status Updater ---
-def time_based_status_thread():
-    print("⏰ Time-based status updater thread started.")
-    while True:
-        time.sleep(60) # Check every minute
-        if not os.path.exists(TRIP_INFO_PATH):
-            continue
+@app.route('/update_status')
+def update_status():
+    """
+    This endpoint is called by a Vercel Cron Job to update the trip status.
+    """
+    if not os.path.exists(TRIP_INFO_PATH):
+        return "No active trip.", 200
 
-        with open(TRIP_INFO_PATH, "r+") as f:
-            trip_info = json.load(f)
-            if trip_info.get("trip_status") != "active":
-                continue
+    with open(TRIP_INFO_PATH, "r+") as f:
+        trip_info = json.load(f)
+        if trip_info.get("trip_status") != "active":
+            return "Trip is not active.", 200
 
-            flight_info = trip_info.get("flight_info", {})
-            now = datetime.now(timezone.utc)
+        flight_info = trip_info.get("flight_info", {})
+        now = datetime.now(timezone.utc)
 
-            dep_time = datetime.fromisoformat(flight_info['scheduled_departure'])
-            arr_time = datetime.fromisoformat(flight_info['scheduled_arrival'])
-            boarding_time = dep_time - timedelta(minutes=45)
+        dep_time = datetime.fromisoformat(flight_info['scheduled_departure'])
+        arr_time = datetime.fromisoformat(flight_info['scheduled_arrival'])
+        boarding_time = dep_time - timedelta(minutes=45)
 
-            new_status = flight_info['status']
-            if boarding_time <= now < dep_time:
-                new_status = 'boarding'
-            elif dep_time <= now < arr_time:
-                new_status = 'in_flight'
-            elif now >= arr_time:
-                new_status = 'landed'
+        new_status = flight_info['status']
+        if boarding_time <= now < dep_time:
+            new_status = 'boarding'
+        elif dep_time <= now < arr_time:
+            new_status = 'in_flight'
+        elif now >= arr_time:
+            new_status = 'landed'
 
-            if new_status != flight_info['status']:
-                flight_info['status'] = new_status
-                trip_info['flight_info'] = flight_info
-                f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
-                print(f"Status updated to: {new_status}")
+        if new_status != flight_info['status']:
+            flight_info['status'] = new_status
+            trip_info['flight_info'] = flight_info
+            f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+            print(f"Status updated to: {new_status}")
+            return f"Status updated to: {new_status}", 200
+
+    return "No status change.", 200
