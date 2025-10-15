@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import json
 import folium
 from streamlit_folium import st_folium
@@ -40,6 +41,9 @@ def to_ist(utc_dt_str):
 # --- Main Dashboard ---
 st.title("🛰️ Jules Tracker — Project Sanjaya (Odyssey)")
 st.markdown("Live trip tracking with automated flight detection and multi-segment journey support.")
+
+# Auto-refresh the dashboard every 20 seconds
+st_autorefresh(interval=20 * 1000, key="dashboard_refresh")
 
 # --- Data Loading ---
 trip_info = load_json(TRIP_INFO_FILE)

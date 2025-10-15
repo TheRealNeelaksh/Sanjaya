@@ -1,23 +1,19 @@
-# 🛰️ Project Sanjaya — Jules Tracker (v0.2 "Guardian")
+# 🛰️ Project Sanjaya — Jules Tracker (v0.4 "Pathfinder")
 
-**A live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
+**An automated, live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
 
-This version has been upgraded to a full client-server application for precise, mobile-based GPS tracking.
+This version focuses on a seamless user experience with automatic link generation and a self-refreshing dashboard.
 
 ---
 
 ## 🚀 Features
 
-- **Mobile GPS Tracking**: Generates a web link to be opened on a mobile device for precise location access.
-- **User & Flight Details**: The web interface captures the user's name, flight number, and PNR to initialize a session.
-- **Automated Mode Switching**:
-    - **Ground Tracking**: Tracks your location via the phone's GPS.
-    - **Airport Geofencing**: Automatically detects when you enter an airport's perimeter and updates the status.
-    - **In-Flight Tracking**: Switches to the AviationStack API to track the flight's progress, pausing phone GPS to save battery.
-    - **Landing Detection**: Detects when the flight has landed and seamlessly resumes ground tracking.
-- **Live Dashboard**: A Streamlit dashboard visualizes the entire journey, showing the live path, user details, and current status (e.g., 🟢 Active, ✈️ At Airport, 🛫 In Flight, 🛬 Landed).
-- **Start/Stop Control**: The web interface has buttons to start and stop the tracking session.
-- **Trip Summary**: Generates a summary of the trip's duration and distance upon completion.
+- **Automatic Public URL**: Instantly generates a secure, public `ngrok` URL for the tracking web page. No more manual IP address sharing!
+- **Auto-Refreshing Dashboard**: The Streamlit dashboard now automatically refreshes every 20 seconds, ensuring you always see the latest data.
+- **Flexible Trip Management**: Start a "Trip," then begin and end multiple "Tracking Segments" within it (e.g., for a drive, then a walk).
+- **Smart Flight Tracking**: Automatically fetches flight schedules and polls for live data only during the flight window to be more efficient.
+- **Full Journey Visualization**: Tracks ground movement (via phone GPS) and air travel (via flight API) and displays the entire path on a single map.
+- **Final Map Image**: Generates a PNG image of the complete trip map upon completion.
 
 ---
 
@@ -47,11 +43,11 @@ The system consists of two main components that run simultaneously:
   ```bash
   pip install -r requirements.txt
   ```
-- **Set API Key**:
-  - Rename `.env.example` to `.env`.
-  - Add your AviationStack API key to the `.env` file:
-    ```
-    AVIATIONSTACK_KEY="YOUR_KEY_HERE"
+- **Set API & Ngrok Keys**:
+  - Add your AviationStack API key to the `.env` file: `AVIATIONSTACK_KEY="YOUR_KEY_HERE"`
+  - **(First Time Only)** Configure your ngrok authtoken by running the following command in your terminal. You can get a free token from the [ngrok Dashboard](https://dashboard.ngrok.com/get-started/your-authtoken).
+    ```bash
+    ngrok config add-authtoken <YOUR_NGROK_AUTHTOKEN>
     ```
 
 ### 2. Running the Application
@@ -62,18 +58,12 @@ Simply run the unified launcher script:
 python run_app.py
 ```
 
-This single command will:
-1.  Start the Flask backend server.
-2.  Start the Streamlit dashboard.
-3.  Display the necessary URLs for you to use.
-
-Press `Ctrl+C` in the terminal to shut down both services gracefully.
+This single command will launch all services and automatically print your **unique, public tracking URL** to the console.
 
 ### 3. Start Tracking
 
-1.  Open the network URL from the backend server (e.g., `http://192.168.1.5:8080`) on your mobile phone's web browser.
-2.  Fill in your name and flight details.
-3.  Press "Start Tracking".
-4.  View your progress on the Streamlit dashboard on your computer.
+1.  Open the public tracking URL (e.g., `https://<unique-id>.ngrok-free.app`) on your mobile phone's web browser.
+2.  Fill in your trip details and press "Start Trip".
+3.  View your progress on the Streamlit dashboard (usually at `http://localhost:8502`).
 
 For deployment instructions, see `DEPLOYMENT.md`.
