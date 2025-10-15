@@ -144,6 +144,45 @@ def reset_trip():
     print("Trip data has been reset.")
     return jsonify({"status": "success"})
 
+@app.route('/sync_flight', methods=['POST'])
+def sync_flight():
+    """Forces a manual sync of flight data."""
+    if not os.path.exists(TRIP_INFO_PATH):
+        return jsonify({"status": "error", "message": "No active trip"}), 404
+
+    with open(TRIP_INFO_PATH, "r+") as f:
+        trip_info = json.load(f)
+
+        print(f"Manual sync requested for flight {trip_info['flight_number']}...")
+        flight_data = get_flight_data(
+            flight_id=trip_info['flight_number'],
+            dep_iata=trip_info['dep_iata'],
+            arr_iata=trip_info['arr_iata'],
+            date=trip_info['departure_date']
+        )
+
+        if flight_data and "flight_info" in flight_data:
+            flight_info_data = flight_data["flight_info"]
+            airplane_tracker = flight_data.get("airplane_tracker", {})
+
+            flight_info = trip_info.get("flight_info", {})
+            flight_info["status"] = flight_info_data.get("status", "scheduled").lower()
+            flight_info["live_data"] = airplane_tracker.get("live")
+
+            departure_info = flight_info_data.get("departure_airport", {})
+            arrival_info = flight_info_data.get("arrival_airport", {})
+            flight_info["scheduled_departure"] = departure_info.get("time")
+            flight_info["scheduled_arrival"] = arrival_info.get("time")
+
+            trip_info['flight_info'] = flight_info
+            f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+
+            print(f"✅ Manual sync successful for {trip_info['flight_number']}.")
+            return jsonify({"status": "success", "flight_info": flight_info})
+        else:
+            print(f"⚠️  Manual sync failed for {trip_info['flight_number']}.")
+            return jsonify({"status": "error", "message": "Could not retrieve flight data."}), 500
+
 from geopy.geocoders import Nominatim
 
 # --- "Reached Home" Detector ---
