@@ -6,11 +6,14 @@ import os
 import threading
 from pyngrok import ngrok, conf
 
-# Import the Flask app and the flight tracker thread function
-from main import app, flight_tracker_thread
+# Import the flight tracker thread function
+from main import flight_tracker_thread
 
 # --- Configuration ---
-FLASK_PORT = 5000 # Using a different port to avoid conflicts
+FLASK_PORT = 5000
+STREAMLIT_PORT = 8501
+GUNICORN_WORKERS = 4
+FLASK_APP_MODULE = "main:app"
 STREAMLIT_APP_FILE = "dashboard/app.py"
 NGROK_CONFIG_FILE = "ngrok.yml"
 
@@ -33,16 +36,32 @@ atexit.register(cleanup)
 
 def run():
     """
-    Launches the Flask app, ngrok tunnel, flight tracker, and Streamlit dashboard.
+    Launches Gunicorn, the flight tracker, ngrok, and Streamlit.
     """
     print("🚀 Launching Project Sanjaya (Conduit)...")
 
+    # --- Start Gunicorn Server ---
+    try:
+        print(f"Starting Gunicorn server for {FLASK_APP_MODULE}...")
+        gunicorn_process = subprocess.Popen([
+            "gunicorn", "--workers", str(GUNICORN_WORKERS),
+            "--bind", f"0.0.0.0:{FLASK_PORT}", FLASK_APP_MODULE
+        ], stdout=sys.stdout, stderr=sys.stderr)
+        processes.append(gunicorn_process)
+        print(f"✅ Gunicorn started with PID: {gunicorn_process.pid}")
+    except Exception as e:
+        print(f"❌ Failed to start Gunicorn: {e}. Is gunicorn installed?")
+        sys.exit(1)
+
+    # --- Start Flight Tracker Thread ---
+    print("Starting flight tracker thread...")
+    tracker_thread = threading.Thread(target=flight_tracker_thread, daemon=True)
+    tracker_thread.start()
+
     # --- Configure and start ngrok ---
     try:
-        print("Authenticating ngrok...")
-        conf.get_default().config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), NGROK_CONFIG_FILE)
-
         print("Starting ngrok tunnel...")
+        conf.get_default().config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), NGROK_CONFIG_FILE)
         global ngrok_tunnel
         ngrok_tunnel = ngrok.connect(FLASK_PORT)
         public_url = ngrok_tunnel.public_url
@@ -53,21 +72,11 @@ def run():
         print(f"❌ Failed to start ngrok tunnel: {e}")
         sys.exit(1)
 
-    # --- Start Flask App and Flight Tracker in Threads ---
-    print("Starting Flask backend and flight tracker...")
-    flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=FLASK_PORT, use_reloader=False))
-    flask_thread.daemon = True
-    flask_thread.start()
-
-    tracker_thread = threading.Thread(target=flight_tracker_thread)
-    tracker_thread.daemon = True
-    tracker_thread.start()
-
     # --- Launch Streamlit Frontend ---
     try:
         print(f"Starting Streamlit dashboard...")
         streamlit_process = subprocess.Popen(
-            [sys.executable, "-m", "streamlit", "run", STREAMLIT_APP_FILE, "--", public_url],
+            [sys.executable, "-m", "streamlit", "run", STREAMLIT_APP_FILE, "--server.port", str(STREAMLIT_PORT), "--", public_url],
             stdout=sys.stdout, stderr=sys.stderr
         )
         processes.append(streamlit_process)
@@ -76,13 +85,11 @@ def run():
         print(f"❌ Failed to start Streamlit dashboard: {e}")
         sys.exit(1)
 
-    print("\n🎉 Project Sanjaya is running!")
-    print("➡️  Access the Streamlit dashboard in your browser.")
-    print("\nPress Ctrl+C in this window to stop all services.")
+    print(f"\n🎉 Project Sanjaya is running! Dashboard at http://localhost:{STREAMLIT_PORT}")
+    print("Press Ctrl+C in this window to stop all services.")
 
     try:
-        while True:
-            time.sleep(1)
+        gunicorn_process.wait() # Keep the main script alive
     except KeyboardInterrupt:
         print("\n🛑 Ctrl+C received.")
         sys.exit(0)

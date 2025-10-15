@@ -1,8 +1,8 @@
-# 🛰️ Project Sanjaya — Jules Tracker (v0.4 "Pathfinder")
+# 🛰️ Project Sanjaya — Jules Tracker (v0.5 "Conduit")
 
-**An automated, live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
+**A robust, automated, live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
 
-This version focuses on a seamless user experience with automatic link generation and a self-refreshing dashboard.
+This version focuses on stability and a seamless user experience, with a production-ready server, automatic link generation, and a self-refreshing dashboard.
 
 ---
 
@@ -21,8 +21,8 @@ This version focuses on a seamless user experience with automatic link generatio
 
 The system consists of two main components that run simultaneously:
 
-1.  **The Flask Backend (`main.py`)**:
-    *   Serves a web page (`templates/index.html`) to the user's mobile device.
+1.  **The Gunicorn + Flask Backend (`run_app.py` -> `main.py`)**:
+    *   A robust Gunicorn server runs the Flask application to serve the tracking web page.
     *   This page uses the browser's Geolocation API to get GPS coordinates.
     *   Receives user details and location data from the web page.
     *   Runs a background thread to monitor flight status using the AviationStack API.
