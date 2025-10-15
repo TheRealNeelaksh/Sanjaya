@@ -1,0 +1,9 @@
+[
+  { "name": "IndiGo", "iata": "6E" },
+  { "name": "Air India", "iata": "AI" },
+  { "name": "Vistara", "iata": "UK" },
+  { "name": "SpiceJet", "iata": "SG" },
+  { "name": "AirAsia India", "iata": "I5" },
+  { "name": "Akasa Air", "iata": "QP" },
+  { "name": "Alliance Air", "iata": "9I" }
+]

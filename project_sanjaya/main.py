@@ -24,14 +24,28 @@ def index():
     """Serves the main tracking web page."""
     return render_template('index.html')
 
+@app.route('/airlines')
+def get_airlines():
+    """Provides the list of airlines to the frontend."""
+    with open(os.path.join(os.path.dirname(__file__), 'jules', 'airlines.json')) as f:
+        airlines = json.load(f)
+    return jsonify(airlines)
+
 @app.route('/start_trip', methods=['POST'])
 def start_trip():
     data = request.get_json()
-    if not data or 'name' not in data or 'flightNumber' not in data:
+    required_fields = ['name', 'flightNumber', 'pnr', 'departureDate']
+    if not data or not all(field in data for field in required_fields):
         return jsonify({"status": "error", "message": "Invalid data"}), 400
 
-    flight_iata = data['flightNumber']
-    flight_schedule = get_flight_data(flight_iata)
+    flight_iata = data['flightNumber'] # This now includes the airline code
+    departure_date = data['departureDate']
+
+    # The airline IATA is now part of the flight_iata string, but the API needs it separate
+    # We can extract it, assuming 2-char airline code
+    airline_iata = flight_iata[:2]
+
+    flight_schedule = get_flight_data(flight_iata, departure_date=departure_date, airline_iata=airline_iata)
 
     departure_info = {}
     arrival_info = {}
@@ -40,7 +54,7 @@ def start_trip():
         departure_info = flight_data_list[0].get('departure', {})
         arrival_info = flight_data_list[0].get('arrival', {})
     else:
-        print(f"⚠️  Warning: Could not find flight data for {flight_iata}. Proceeding without flight schedule.")
+        print(f"⚠️  Warning: Could not find flight data for {flight_iata} on {departure_date}. Proceeding without flight schedule.")
 
     trip_info = {
         "trip_id": str(uuid.uuid4()), "user_name": data['name'], "flight_number": flight_iata,

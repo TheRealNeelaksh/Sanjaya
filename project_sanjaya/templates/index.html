@@ -11,7 +11,7 @@
         p { color: #666; }
         .form-group { margin-bottom: 1rem; text-align: left; }
         label { font-weight: bold; display: block; margin-bottom: 0.5rem; }
-        input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; }
+        input, select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; }
         button { border: none; padding: 15px 30px; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background-color 0.2s; width: 100%; margin-top: 0.5rem; }
         button:disabled { background-color: #cccccc; cursor: not-allowed; }
         #startTripButton { background-color: #28a745; color: white; }
@@ -25,7 +25,6 @@
     <div class="container">
         <h1>🛰️ Jules Tracker</h1>
 
-        <!-- Setup Form: Visible only at the start -->
         <div id="setup-form">
             <p>Enter your details to begin your trip.</p>
             <div class="form-group">
@@ -33,8 +32,16 @@
                 <input type="text" id="name" name="name" required>
             </div>
             <div class="form-group">
-                <label for="flightNumber">Flight Number (e.g., 6E245):</label>
+                <label for="airline">Airline:</label>
+                <select id="airline" name="airline" required></select>
+            </div>
+            <div class="form-group">
+                <label for="flightNumber">Flight Number (e.g., 245):</label>
                 <input type="text" id="flightNumber" name="flightNumber" required>
+            </div>
+            <div class="form-group">
+                <label for="departureDate">Departure Date:</label>
+                <input type="date" id="departureDate" name="departureDate" required>
             </div>
             <div class="form-group">
                 <label for="pnr">PNR:</label>
@@ -43,7 +50,6 @@
             <button id="startTripButton">Start Trip</button>
         </div>
 
-        <!-- In-Trip Controls: Visible after trip starts -->
         <div id="trip-controls" class="hidden">
             <p>Trip has started. Use the button below to start/stop tracking your movements.</p>
             <button id="segmentControlButton">Start Tracking</button>
@@ -55,7 +61,6 @@
     </div>
 
     <script>
-        // --- Element References ---
         const setupForm = document.getElementById('setup-form');
         const tripControls = document.getElementById('trip-controls');
         const startTripButton = document.getElementById('startTripButton');
@@ -63,23 +68,41 @@
         const endTripButton = document.getElementById('endTripButton');
         const statusEl = document.getElementById('status');
         const coordsEl = document.getElementById('coords');
+        const airlineSelect = document.getElementById('airline');
+        const departureDateInput = document.getElementById('departureDate');
 
-        // --- State Management ---
         let isTrackingSegment = false;
         let watchId = null;
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Set default departure date to today
+            departureDateInput.valueAsDate = new Date();
+
+            // Fetch and populate airlines
+            const response = await fetch('/airlines');
+            const airlines = await response.json();
+            airlines.forEach(airline => {
+                const option = document.createElement('option');
+                option.value = airline.iata;
+                option.textContent = `${airline.name} (${airline.iata})`;
+                airlineSelect.appendChild(option);
+            });
+        });
 
         // --- Event Listeners ---
         startTripButton.addEventListener('click', handleStartTrip);
         segmentControlButton.addEventListener('click', handleSegmentControl);
         endTripButton.addEventListener('click', handleEndTrip);
 
-        // --- Handlers ---
         async function handleStartTrip() {
             const name = document.getElementById('name').value;
+            const airlineIATA = airlineSelect.value;
             const flightNumber = document.getElementById('flightNumber').value;
+            const departureDate = departureDateInput.value;
             const pnr = document.getElementById('pnr').value;
 
-            if (!name || !flightNumber || !pnr) {
+            if (!name || !airlineIATA || !flightNumber || !departureDate || !pnr) {
                 alert('Please fill in all details.');
                 return;
             }
@@ -87,10 +110,12 @@
             startTripButton.disabled = true;
             statusEl.textContent = 'Status: Initializing trip...';
 
+            const fullFlightNumber = `${airlineIATA}${flightNumber}`;
+
             const response = await fetch('/start_trip', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, flightNumber, pnr })
+                body: JSON.stringify({ name, flightNumber: fullFlightNumber, pnr, departureDate })
             });
 
             if (response.ok) {
@@ -98,7 +123,7 @@
                 tripControls.classList.remove('hidden');
                 statusEl.textContent = 'Status: Trip active. Ready to track.';
             } else {
-                statusEl.textContent = 'Status: Error starting trip.';
+                statusEl.textContent = 'Status: Error starting trip. Check flight details.';
                 startTripButton.disabled = false;
             }
         }
@@ -126,34 +151,22 @@
         }
 
         async function handleEndTrip() {
-            if (isTrackingSegment) {
-                await handleSegmentControl(); // Stop the last segment first
-            }
+            if (isTrackingSegment) { await handleSegmentControl(); }
             endTripButton.disabled = true;
             segmentControlButton.disabled = true;
             statusEl.textContent = 'Status: Ending trip and generating summary...';
-
             await fetch('/end_trip', { method: 'POST' });
-
-            statusEl.innerHTML = '<h2>Trip Ended</h2><p>Summary has been generated. You can view it on the main dashboard. You can now close this window.</p>';
+            statusEl.innerHTML = '<h2>Trip Ended</h2><p>Summary has been generated. You can view it on the main dashboard.</p>';
             coordsEl.style.display = 'none';
         }
 
-        // --- Geolocation Functions ---
         function startGeolocationWatch() {
-            if (!navigator.geolocation) {
-                statusEl.textContent = 'Error: Geolocation is not supported.';
-                return;
-            }
+            if (!navigator.geolocation) { statusEl.textContent = 'Error: Geolocation is not supported.'; return; }
             watchId = navigator.geolocation.watchPosition(
                 (position) => {
                     const { latitude, longitude } = position.coords;
                     coordsEl.textContent = `Coordinates: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-                    fetch('/log', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ lat: latitude, lon: longitude })
-                    });
+                    fetch('/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lat: latitude, lon: longitude }) });
                 },
                 (error) => { console.error('Geolocation Error:', error); },
                 { enableHighAccuracy: true }
@@ -161,10 +174,7 @@
         }
 
         function stopGeolocationWatch() {
-            if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId);
-                watchId = null;
-            }
+            if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
         }
     </script>
 </body>

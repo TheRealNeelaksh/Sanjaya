@@ -19,7 +19,7 @@ NGROK_CONFIG_FILE = "ngrok.yml"
 
 # --- Global Process Management ---
 processes = []
-ngrok_tunnel = None
+ngrok_tunnels = []
 
 def cleanup():
     """Ensure all child processes and ngrok tunnels are terminated on exit."""
@@ -28,71 +28,69 @@ def cleanup():
         if p.poll() is None:
             p.terminate()
             p.wait()
-    if ngrok_tunnel:
-        ngrok.disconnect(ngrok_tunnel.public_url)
+    for tunnel in ngrok_tunnels:
+        ngrok.disconnect(tunnel.public_url)
     print("All services stopped.")
 
 atexit.register(cleanup)
 
 def run():
     """
-    Launches Waitress, the flight tracker, ngrok, and Streamlit.
+    Launches the backend, frontend, and two public ngrok tunnels.
     """
-    print("🚀 Launching Project Sanjaya (Conduit)...")
+    print("🚀 Launching Project Sanjaya (Oracle)...")
 
     # --- Start Waitress Server ---
     try:
-        print(f"Starting Waitress server for {FLASK_APP_MODULE}...")
         waitress_process = subprocess.Popen([
-            "waitress-serve",
-            f"--threads={WAITRESS_THREADS}",
-            f"--host=0.0.0.0",
-            f"--port={FLASK_PORT}",
-            FLASK_APP_MODULE
-        ], stdout=sys.stdout, stderr=sys.stderr)
+            "waitress-serve", f"--threads={WAITRESS_THREADS}",
+            f"--host=0.0.0.0", f"--port={FLASK_PORT}", FLASK_APP_MODULE
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         processes.append(waitress_process)
         print(f"✅ Waitress server started with PID: {waitress_process.pid}")
     except Exception as e:
-        print(f"❌ Failed to start Waitress: {e}. Is waitress installed?")
-        sys.exit(1)
+        print(f"❌ Failed to start Waitress: {e}"); sys.exit(1)
 
     # --- Start Flight Tracker Thread ---
-    print("Starting flight tracker thread...")
     tracker_thread = threading.Thread(target=flight_tracker_thread, daemon=True)
     tracker_thread.start()
+    print("✅ Flight tracker thread started.")
 
-    # --- Configure and start ngrok ---
+    # --- Configure and start ngrok tunnels ---
     try:
-        print("Starting ngrok tunnel...")
         conf.get_default().config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), NGROK_CONFIG_FILE)
-        global ngrok_tunnel
-        ngrok_tunnel = ngrok.connect(FLASK_PORT)
-        public_url = ngrok_tunnel.public_url
+
+        print("Starting ngrok tunnels...")
+        flask_tunnel = ngrok.connect(FLASK_PORT, "http")
+        streamlit_tunnel = ngrok.connect(STREAMLIT_PORT, "http")
+        ngrok_tunnels.extend([flask_tunnel, streamlit_tunnel])
+
         print("="*60)
-        print(f"📲 YOUR PUBLIC TRACKING URL: {public_url}")
+        print(f"📲 PUBLIC TRACKING URL: {flask_tunnel.public_url}")
+        print(f"🖥️  PUBLIC DASHBOARD URL: {streamlit_tunnel.public_url}")
         print("="*60)
     except Exception as e:
-        print(f"❌ Failed to start ngrok tunnel: {e}")
-        sys.exit(1)
+        print(f"❌ Failed to start ngrok tunnels: {e}"); sys.exit(1)
 
     # --- Launch Streamlit Frontend ---
     try:
         print(f"Starting Streamlit dashboard...")
         streamlit_process = subprocess.Popen(
-            [sys.executable, "-m", "streamlit", "run", STREAMLIT_APP_FILE, "--server.port", str(STREAMLIT_PORT), "--", public_url],
-            stdout=sys.stdout, stderr=sys.stderr
+            [sys.executable, "-m", "streamlit", "run", STREAMLIT_APP_FILE,
+             "--server.port", str(STREAMLIT_PORT), "--",
+             flask_tunnel.public_url, streamlit_tunnel.public_url],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         processes.append(streamlit_process)
         print(f"✅ Streamlit dashboard started with PID: {streamlit_process.pid}")
     except Exception as e:
-        print(f"❌ Failed to start Streamlit dashboard: {e}")
-        sys.exit(1)
+        print(f"❌ Failed to start Streamlit dashboard: {e}"); sys.exit(1)
 
-    print(f"\n🎉 Project Sanjaya is running! Dashboard at http://localhost:{STREAMLIT_PORT}")
+    print(f"\n🎉 Project Sanjaya is running!")
     print("Press Ctrl+C in this window to stop all services.")
 
     try:
-        waitress_process.wait() # Keep the main script alive
+        waitress_process.wait()
     except KeyboardInterrupt:
         print("\n🛑 Ctrl+C received.")
         sys.exit(0)

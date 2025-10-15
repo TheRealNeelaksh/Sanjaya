@@ -1,28 +1,36 @@
-import requests, os
+import requests
+import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-def get_flight_data(flight_iata):
+def get_flight_data(flight_iata, departure_date=None, airline_iata=None):
     """
-    Fetches flight data from AviationStack API.
+    Fetches flight data from AviationStack API using more specific parameters.
     """
     key = os.getenv("AVIATIONSTACK_KEY")
     if not key or key == "YOUR_API_KEY_HERE":
         print("Error: AVIATIONSTACK_KEY not found or not set in .env file.")
-        return None
+        return {} # Return empty dict on error
 
     url = f"http://api.aviationstack.com/v1/flights"
+
     params = {
         'access_key': key,
         'flight_iata': flight_iata
     }
 
+    # Add optional parameters for a more specific search
+    if airline_iata:
+        params['airline_iata'] = airline_iata
+    if departure_date:
+        params['flight_date'] = departure_date
+
     try:
         response = requests.get(url, params=params)
-        response.raise_for_status()  # Raises an exception for 4XX/5XX errors
+        response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error fetching flight data: {e}")
-        return None
+        return {} # Return empty dict on error

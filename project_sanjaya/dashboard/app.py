@@ -57,20 +57,30 @@ coords = [(e["lat"], e["lon"]) for e in events if "lat" in e and "lon" in e]
 # --- Sidebar for Trip Info ---
 st.sidebar.title("Trip Details")
 
-# --- Display Tracking Link ---
+# --- Display Public Links ---
 try:
-    public_url = sys.argv[1]
-    st.sidebar.subheader("Your Tracking Link")
-    st.sidebar.code(public_url)
+    tracking_url = sys.argv[1]
+    dashboard_url = sys.argv[2]
 
-    # Generate and display QR code
-    qr_img = qrcode.make(public_url)
-    buf = BytesIO()
-    qr_img.save(buf, format="PNG")
-    st.sidebar.image(buf, width=200, caption="Scan to open on your phone")
+    st.sidebar.subheader("📲 Tracking Link")
+    st.sidebar.code(tracking_url)
+    qr_track = qrcode.make(tracking_url)
+    buf_track = BytesIO()
+    qr_track.save(buf_track, format="PNG")
+    st.sidebar.image(buf_track, width=200, caption="Scan to open tracking page")
+
     st.sidebar.markdown("---")
+
+    st.sidebar.subheader("🖥️ Public Dashboard Link")
+    st.sidebar.code(dashboard_url)
+    qr_dash = qrcode.make(dashboard_url)
+    buf_dash = BytesIO()
+    qr_dash.save(buf_dash, format="PNG")
+    st.sidebar.image(buf_dash, width=200, caption="Scan to share dashboard")
+    st.sidebar.markdown("---")
+
 except IndexError:
-    st.sidebar.error("Tracking URL not provided. Please run the app using `run_app.py`.")
+    st.sidebar.error("Public URLs not provided. Please run via `run_app.py`.")
 
 if not trip_info:
     st.sidebar.warning("No active trip. Start a new trip from the web link.")
