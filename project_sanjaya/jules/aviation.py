@@ -28,7 +28,7 @@ def get_flight_data(flight_iata, departure_date=None, airline_iata=None):
         params['flight_date'] = departure_date
 
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=15) # 15-second timeout
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:

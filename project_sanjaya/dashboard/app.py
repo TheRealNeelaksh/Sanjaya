@@ -57,31 +57,6 @@ coords = [(e["lat"], e["lon"]) for e in events if "lat" in e and "lon" in e]
 # --- Sidebar for Trip Info ---
 st.sidebar.title("Trip Details")
 
-# --- Display Public Links ---
-try:
-    tracking_url = sys.argv[1]
-    dashboard_url = sys.argv[2]
-
-    st.sidebar.subheader("📲 Tracking Link")
-    st.sidebar.code(tracking_url)
-    qr_track = qrcode.make(tracking_url)
-    buf_track = BytesIO()
-    qr_track.save(buf_track, format="PNG")
-    st.sidebar.image(buf_track, width=200, caption="Scan to open tracking page")
-
-    st.sidebar.markdown("---")
-
-    st.sidebar.subheader("🖥️ Public Dashboard Link")
-    st.sidebar.code(dashboard_url)
-    qr_dash = qrcode.make(dashboard_url)
-    buf_dash = BytesIO()
-    qr_dash.save(buf_dash, format="PNG")
-    st.sidebar.image(buf_dash, width=200, caption="Scan to share dashboard")
-    st.sidebar.markdown("---")
-
-except IndexError:
-    st.sidebar.error("Public URLs not provided. Please run via `run_app.py`.")
-
 if not trip_info:
     st.sidebar.warning("No active trip. Start a new trip from the web link.")
 else:
@@ -139,3 +114,28 @@ with st.expander("Show Raw Log Data"):
     st.json(trip_log)
 with st.expander("Show Trip Info"):
     st.json(trip_info)
+
+# --- Display Public Links at the Bottom of the Sidebar ---
+st.sidebar.markdown("---")
+try:
+    tracking_url = sys.argv[1]
+    dashboard_url = sys.argv[2]
+
+    st.sidebar.subheader("📲 Tracking Link")
+    st.sidebar.code(tracking_url)
+    qr_track = qrcode.make(tracking_url)
+    buf_track = BytesIO()
+    qr_track.save(buf_track, format="PNG")
+    st.sidebar.image(buf_track, width=200, caption="Scan to open tracking page")
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.subheader("🖥️ Public Dashboard Link")
+    st.sidebar.code(dashboard_url)
+    qr_dash = qrcode.make(dashboard_url)
+    buf_dash = BytesIO()
+    qr_dash.save(buf_dash, format="PNG")
+    st.sidebar.image(buf_dash, width=200, caption="Scan to share dashboard")
+
+except IndexError:
+    st.sidebar.error("Public URLs not provided. Please run via `run_app.py`.")
