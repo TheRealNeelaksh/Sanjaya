@@ -19,7 +19,7 @@ NGROK_CONFIG_FILE = "ngrok.yml"
 
 # --- Global Process Management ---
 processes = []
-ngrok_tunnels = []
+ngrok_tunnel = None
 
 def cleanup():
     """Ensure all child processes and ngrok tunnels are terminated on exit."""
@@ -28,17 +28,17 @@ def cleanup():
         if p.poll() is None:
             p.terminate()
             p.wait()
-    for tunnel in ngrok_tunnels:
-        ngrok.disconnect(tunnel.public_url)
+    if ngrok_tunnel:
+        ngrok.disconnect(ngrok_tunnel.public_url)
     print("All services stopped.")
 
 atexit.register(cleanup)
 
 def run():
     """
-    Launches the backend, frontend, and two public ngrok tunnels.
+    Launches the backend, frontend, and a public ngrok tunnel for the tracking link.
     """
-    print("🚀 Launching Project Sanjaya (Oracle)...")
+    print("🚀 Launching Project Sanjaya (Keystone)...")
 
     # --- Start Waitress Server ---
     try:
@@ -56,26 +56,21 @@ def run():
     tracker_thread.start()
     print("✅ Flight tracker thread started.")
 
-    # --- Configure and start ngrok tunnels ---
+    # --- Configure and start ngrok tunnel for Flask ---
     try:
         conf.get_default().config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), NGROK_CONFIG_FILE)
 
-        print("Starting ngrok tunnels...")
-        # Start tunnels in separate threads to avoid blocking
-        flask_tunnel = ngrok.connect(FLASK_PORT, "http", name="flask_app")
-        ngrok_tunnels.append(flask_tunnel)
-        print(f"✅ Flask tunnel started: {flask_tunnel.public_url}")
-
-        streamlit_tunnel = ngrok.connect(STREAMLIT_PORT, "http", name="streamlit_app")
-        ngrok_tunnels.append(streamlit_tunnel)
-        print(f"✅ Streamlit tunnel started: {streamlit_tunnel.public_url}")
+        print("Starting ngrok tunnel for tracking link...")
+        global ngrok_tunnel
+        ngrok_tunnel = ngrok.connect(FLASK_PORT, "http")
+        public_url = ngrok_tunnel.public_url
 
         print("="*60)
-        print(f"📲 PUBLIC TRACKING URL: {flask_tunnel.public_url}")
-        print(f"🖥️  PUBLIC DASHBOARD URL: {streamlit_tunnel.public_url}")
+        print(f"📲 YOUR PUBLIC TRACKING URL: {public_url}")
+        print(f"🖥️  YOUR LOCAL DASHBOARD URL: http://localhost:{STREAMLIT_PORT}")
         print("="*60)
     except Exception as e:
-        print(f"❌ Failed to start ngrok tunnels: {e}"); sys.exit(1)
+        print(f"❌ Failed to start ngrok tunnel: {e}"); sys.exit(1)
 
     # --- Launch Streamlit Frontend ---
     try:
@@ -83,7 +78,7 @@ def run():
         streamlit_process = subprocess.Popen(
             [sys.executable, "-m", "streamlit", "run", STREAMLIT_APP_FILE,
              "--server.port", str(STREAMLIT_PORT), "--",
-             flask_tunnel.public_url, streamlit_tunnel.public_url],
+             public_url],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         processes.append(streamlit_process)
