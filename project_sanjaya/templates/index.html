@@ -55,6 +55,9 @@
         let userInfo = {};
 
         trackButton.addEventListener('click', () => {
+            // Disable the button immediately to prevent double-clicks
+            trackButton.disabled = true;
+
             if (!isTracking) {
                 if (validateForm()) {
                     userInfo = {
@@ -65,6 +68,7 @@
                     startTracking();
                 } else {
                     alert('Please fill in all details.');
+                    trackButton.disabled = false; // Re-enable if form is invalid
                 }
             } else {
                 stopTracking();
@@ -242,6 +246,9 @@
 
             // Start the initial ground tracking
             startGeolocationWatch();
+
+            // Re-enable the button so the user can press stop
+            trackButton.disabled = false;
         }
     </script>
 </body>

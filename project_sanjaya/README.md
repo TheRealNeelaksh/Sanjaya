@@ -56,18 +56,18 @@ The system consists of two main components that run simultaneously:
 
 ### 2. Running the Application
 
-You need to run two processes in separate terminal windows.
+Simply run the unified launcher script:
 
-- **Terminal 1: Start the Backend Server**
-  ```bash
-  python main.py serve
-  ```
-  This will start the Flask server. Note the network URL it provides (e.g., `http://192.168.1.5:8080`).
+```bash
+python run_app.py
+```
 
-- **Terminal 2: Start the Streamlit Dashboard**
-  ```bash
-  streamlit run dashboard/app.py
-  ```
+This single command will:
+1.  Start the Flask backend server.
+2.  Start the Streamlit dashboard.
+3.  Display the necessary URLs for you to use.
+
+Press `Ctrl+C` in the terminal to shut down both services gracefully.
 
 ### 3. Start Tracking
 
