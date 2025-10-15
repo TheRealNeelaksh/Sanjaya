@@ -6,8 +6,8 @@ import os
 import threading
 from pyngrok import ngrok, conf
 
-# Import the flight tracker thread function
-from main import flight_tracker_thread
+# Import the background thread functions
+from main import flight_tracker_thread, reached_home_thread
 
 # --- Configuration ---
 FLASK_PORT = 5000
@@ -51,10 +51,14 @@ def run():
     except Exception as e:
         print(f"❌ Failed to start Waitress: {e}"); sys.exit(1)
 
-    # --- Start Flight Tracker Thread ---
-    tracker_thread = threading.Thread(target=flight_tracker_thread, daemon=True)
-    tracker_thread.start()
+    # --- Start Background Threads ---
+    flight_tracker = threading.Thread(target=flight_tracker_thread, daemon=True)
+    flight_tracker.start()
     print("✅ Flight tracker thread started.")
+
+    home_detector = threading.Thread(target=reached_home_thread, daemon=True)
+    home_detector.start()
+    print("✅ Home detector thread started.")
 
     # --- Configure and start ngrok tunnel for Flask ---
     try:

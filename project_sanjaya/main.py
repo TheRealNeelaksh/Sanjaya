@@ -142,6 +142,50 @@ def reset_trip():
     print("Trip data has been reset.")
     return jsonify({"status": "success"})
 
+from geopy.geocoders import Nominatim
+
+# --- "Reached Home" Detector ---
+def reached_home_thread():
+    """
+    A background thread that checks if the user has been stationary in a
+    new state for over 30 minutes, and updates the status to 'home'.
+    """
+    geolocator = Nominatim(user_agent="jules_tracker")
+    print("🏠 Reached home detector thread started.")
+    while True:
+        time.sleep(60 * 5) # Check every 5 minutes
+        if not os.path.exists(TRIP_INFO_PATH) or not os.path.exists(TRIP_LOG_PATH):
+            continue
+
+        with open(TRIP_INFO_PATH, "r+") as f:
+            trip_info = json.load(f)
+            if trip_info.get("trip_status") != "active":
+                continue
+
+            with open(TRIP_LOG_PATH, "r") as f_log:
+                log_data = json.load(f_log)
+                events = log_data.get("events", [])
+
+            if len(events) < 2:
+                continue
+
+            # Check for stationary period
+            last_event_time = datetime.fromisoformat(events[-1]['timestamp'])
+            if (datetime.now(timezone.utc) - last_event_time) > timedelta(minutes=30):
+
+                # Get start and end locations
+                start_location = geolocator.reverse(f"{events[0]['lat']}, {events[0]['lon']}", language='en')
+                end_location = geolocator.reverse(f"{events[-1]['lat']}, {events[-1]['lon']}", language='en')
+
+                if start_location and end_location:
+                    start_state = start_location.raw.get('address', {}).get('state')
+                    end_state = end_location.raw.get('address', {}).get('state')
+
+                    if start_state and end_state and start_state != end_state:
+                        print(f"✅ User detected as 'home' in new state: {end_state}")
+                        trip_info['trip_status'] = 'home'
+                        f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+
 # --- Smart Flight Tracker ---
 def flight_tracker_thread():
     print("✈️  Smart flight tracker thread started.")
@@ -161,8 +205,10 @@ def flight_tracker_thread():
             # --- Task 1: Fetch Schedule for Pending Trips ---
             if flight_status == "pending_schedule":
                 print(f"Fetching schedule for flight {trip_info['flight_number']}...")
-                airline_iata = trip_info['flight_number'][:2]
-                flight_schedule = get_flight_data(trip_info['flight_number'], trip_info['departure_date'], airline_iata)
+                flight_iata = trip_info['flight_number']
+                airline_iata = ''.join(filter(str.isalpha, flight_iata))
+                flight_number = ''.join(filter(str.isdigit, flight_iata))
+                flight_schedule = get_flight_data(flight_number=flight_number, departure_date=trip_info['departure_date'], airline_iata=airline_iata)
 
                 flight_data_list = flight_schedule.get('data', [])
                 if flight_data_list:

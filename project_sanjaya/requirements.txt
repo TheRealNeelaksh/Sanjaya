@@ -10,3 +10,4 @@ streamlit-autorefresh
 pyngrok
 psutil
 qrcode
+geopy

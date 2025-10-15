@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-def get_flight_data(flight_iata, departure_date=None, airline_iata=None):
+def get_flight_data(flight_number, departure_date=None, airline_iata=None):
     """
     Fetches flight data from AviationStack API using more specific parameters.
     """
@@ -18,7 +18,7 @@ def get_flight_data(flight_iata, departure_date=None, airline_iata=None):
 
     params = {
         'access_key': key,
-        'flight_iata': flight_iata
+        'flight_number': flight_number
     }
 
     # Add optional parameters for a more specific search

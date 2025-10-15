@@ -63,15 +63,23 @@ if not trip_info:
     st.sidebar.warning("No active trip. Start a new trip from the web link below.")
 else:
     status_map = {
-        "active": "🟢 Active", "ended": "🔴 Ended", "at_airport": "✈️ At Airport",
-        "in_flight": "🛫 In Flight", "landed": "🛬 Landed", "scheduled": "🗓️ Scheduled",
-        "pending_schedule": "⏳ Pending Schedule", "schedule_failed": "⚠️ Schedule Failed"
+        "active": ("🟢 Active", "https://i.gifer.com/ZZ5H.gif"),
+        "ended": ("🔴 Ended", "https://i.gifer.com/56Ab.gif"),
+        "at_airport": ("✈️ At Airport", "https://i.gifer.com/origin/f6/f67139d3c636f26b2786377749a3795b.gif"),
+        "in_flight": ("🛫 In Flight", "https://i.gifer.com/56Ab.gif"),
+        "landed": ("🛬 Landed", "https://i.gifer.com/origin/f6/f67139d3c636f26b2786377749a3795b.gif"),
+        "home": ("🏠 Home", "https://i.gifer.com/6E2.gif"),
+        "scheduled": ("🗓️ Scheduled", None),
+        "pending_schedule": ("⏳ Pending Schedule", None),
+        "schedule_failed": ("⚠️ Schedule Failed", None)
     }
-    trip_status = status_map.get(trip_info.get("trip_status"), "❓")
-    flight_status = status_map.get(trip_info.get("flight_info", {}).get("status"), "❓")
+    trip_status_text, trip_status_gif = status_map.get(trip_info.get("trip_status"), ("❓ Unknown", None))
+    flight_status_text, _ = status_map.get(trip_info.get("flight_info", {}).get("status"), ("❓ Unknown", None))
 
-    st.sidebar.metric("Trip Status", trip_status)
-    st.sidebar.info(f"**Flight Status:** {flight_status}")
+    st.sidebar.metric("Trip Status", trip_status_text)
+    if trip_status_gif:
+        st.sidebar.image(trip_status_gif)
+    st.sidebar.info(f"**Flight Status:** {flight_status_text}")
     st.sidebar.subheader(f"👋 {trip_info.get('user_name', 'Guest')}")
     st.sidebar.write(f"**Flight:** {trip_info.get('flight_number', 'N/A')}")
     st.sidebar.write(f"**PNR:** {trip_info.get('pnr', 'N/A')}")
@@ -124,14 +132,21 @@ except IndexError:
     st.sidebar.warning("Tracking URL not available. Run via `run_app.py`.")
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🗑️ Reset Trip Data"):
-    try:
-        response = requests.post("http://localhost:5000/reset_trip")
-        if response.ok:
-            st.sidebar.success("Trip data reset!")
-            time.sleep(1) # Give a moment for the user to see the message
-            st.rerun()
-        else:
-            st.sidebar.error("Failed to reset trip.")
-    except requests.exceptions.ConnectionError:
-        st.sidebar.error("Could not connect to the backend.")
+# --- Admin Actions ---
+is_admin = st.query_params.get("a") == "neelaksh"
+
+if is_admin:
+    st.sidebar.subheader("Admin Actions")
+    if st.sidebar.button("🗑️ Reset Trip Data"):
+        try:
+            response = requests.post("http://localhost:5000/reset_trip")
+            if response.ok:
+                st.sidebar.success("Trip data has been reset!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.sidebar.error("Failed to reset trip.")
+        except requests.exceptions.ConnectionError:
+            st.sidebar.error("Could not connect to the backend.")
+else:
+    st.sidebar.info("Add `?a=neelaksh` to the URL for admin actions like resetting a trip.")
