@@ -4,7 +4,10 @@ import json
 import folium
 from streamlit_folium import st_folium
 import os
+import sys
 from datetime import datetime, timezone, timedelta
+import qrcode
+from io import BytesIO
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -53,6 +56,21 @@ coords = [(e["lat"], e["lon"]) for e in events if "lat" in e and "lon" in e]
 
 # --- Sidebar for Trip Info ---
 st.sidebar.title("Trip Details")
+
+# --- Display Tracking Link ---
+try:
+    public_url = sys.argv[1]
+    st.sidebar.subheader("Your Tracking Link")
+    st.sidebar.code(public_url)
+
+    # Generate and display QR code
+    qr_img = qrcode.make(public_url)
+    buf = BytesIO()
+    qr_img.save(buf, format="PNG")
+    st.sidebar.image(buf, width=200, caption="Scan to open on your phone")
+    st.sidebar.markdown("---")
+except IndexError:
+    st.sidebar.error("Tracking URL not provided. Please run the app using `run_app.py`.")
 
 if not trip_info:
     st.sidebar.warning("No active trip. Start a new trip from the web link.")

@@ -45,9 +45,11 @@ The system consists of two main components that run simultaneously:
   ```
 - **Set API & Ngrok Keys**:
   - Add your AviationStack API key to the `.env` file: `AVIATIONSTACK_KEY="YOUR_KEY_HERE"`
-  - **(First Time Only)** Configure your ngrok authtoken by running the following command in your terminal. You can get a free token from the [ngrok Dashboard](https://dashboard.ngrok.com/get-started/your-authtoken).
-    ```bash
-    ngrok config add-authtoken <YOUR_NGROK_AUTHTOKEN>
+  - Add your ngrok authtoken to the `ngrok.yml` file. You can get a free token from the [ngrok Dashboard](https://dashboard.ngrok.com/get-started/your-authtoken).
+    ```yaml
+    # In ngrok.yml
+    version: "2"
+    authtoken: <YOUR_NGROK_AUTHTOKEN>
     ```
 
 ### 2. Running the Application

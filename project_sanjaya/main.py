@@ -189,16 +189,5 @@ def flight_tracker_thread():
             else:
                 time.sleep(60) # Wait a minute if outside the flight window
 
-# --- Main Application Runner ---
-def main():
-    parser = argparse.ArgumentParser(description="Project Sanjaya")
-    parser.add_argument("command", choices=["serve"], help="serve: Starts the web UI and backend.")
-    args = parser.parse_args()
-    if args.command == "serve":
-        print("🚀 Starting Jules Web Server for Project Sanjaya...")
-        tracker = threading.Thread(target=flight_tracker_thread, daemon=True)
-        tracker.start()
-        app.run(host='0.0.0.0', port=8080)
-
-if __name__ == "__main__":
-    main()
+# This file is now designed to be imported by `run_app.py`
+# and no longer has a direct entry point.
