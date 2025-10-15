@@ -21,8 +21,8 @@ This version focuses on stability and a seamless user experience, with a product
 
 The system consists of two main components that run simultaneously:
 
-1.  **The Gunicorn + Flask Backend (`run_app.py` -> `main.py`)**:
-    *   A robust Gunicorn server runs the Flask application to serve the tracking web page.
+1.  **The Waitress + Flask Backend (`run_app.py` -> `main.py`)**:
+    *   A robust Waitress server runs the Flask application to serve the tracking web page, ensuring cross-platform compatibility.
     *   This page uses the browser's Geolocation API to get GPS coordinates.
     *   Receives user details and location data from the web page.
     *   Runs a background thread to monitor flight status using the AviationStack API.

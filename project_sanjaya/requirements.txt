@@ -4,7 +4,7 @@ geocoder
 requests
 python-dotenv
 Flask
-gunicorn
+waitress
 playwright
 streamlit-autorefresh
 pyngrok

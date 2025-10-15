@@ -12,7 +12,7 @@ from main import flight_tracker_thread
 # --- Configuration ---
 FLASK_PORT = 5000
 STREAMLIT_PORT = 8501
-GUNICORN_WORKERS = 4
+WAITRESS_THREADS = 8
 FLASK_APP_MODULE = "main:app"
 STREAMLIT_APP_FILE = "dashboard/app.py"
 NGROK_CONFIG_FILE = "ngrok.yml"
@@ -36,21 +36,24 @@ atexit.register(cleanup)
 
 def run():
     """
-    Launches Gunicorn, the flight tracker, ngrok, and Streamlit.
+    Launches Waitress, the flight tracker, ngrok, and Streamlit.
     """
     print("🚀 Launching Project Sanjaya (Conduit)...")
 
-    # --- Start Gunicorn Server ---
+    # --- Start Waitress Server ---
     try:
-        print(f"Starting Gunicorn server for {FLASK_APP_MODULE}...")
-        gunicorn_process = subprocess.Popen([
-            "gunicorn", "--workers", str(GUNICORN_WORKERS),
-            "--bind", f"0.0.0.0:{FLASK_PORT}", FLASK_APP_MODULE
+        print(f"Starting Waitress server for {FLASK_APP_MODULE}...")
+        waitress_process = subprocess.Popen([
+            "waitress-serve",
+            f"--threads={WAITRESS_THREADS}",
+            f"--host=0.0.0.0",
+            f"--port={FLASK_PORT}",
+            FLASK_APP_MODULE
         ], stdout=sys.stdout, stderr=sys.stderr)
-        processes.append(gunicorn_process)
-        print(f"✅ Gunicorn started with PID: {gunicorn_process.pid}")
+        processes.append(waitress_process)
+        print(f"✅ Waitress server started with PID: {waitress_process.pid}")
     except Exception as e:
-        print(f"❌ Failed to start Gunicorn: {e}. Is gunicorn installed?")
+        print(f"❌ Failed to start Waitress: {e}. Is waitress installed?")
         sys.exit(1)
 
     # --- Start Flight Tracker Thread ---
@@ -89,7 +92,7 @@ def run():
     print("Press Ctrl+C in this window to stop all services.")
 
     try:
-        gunicorn_process.wait() # Keep the main script alive
+        waitress_process.wait() # Keep the main script alive
     except KeyboardInterrupt:
         print("\n🛑 Ctrl+C received.")
         sys.exit(0)
