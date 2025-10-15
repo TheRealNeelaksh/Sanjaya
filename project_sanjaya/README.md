@@ -1,8 +1,8 @@
-# 🛰️ Project Sanjaya — Jules Tracker (v0.8 "Phoenix")
+# 🛰️ Project Sanjaya — Jules Tracker (v1.1 "Odyssey")
 
 **A highly robust, automated, live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
 
-This is the final, most stable version, focusing on a seamless user experience, resilient architecture, and intuitive controls.
+This is the final, most stable version, using the Google Flights API via SerpApi for maximum reliability.
 
 ---
 
@@ -10,10 +10,9 @@ This is the final, most stable version, focusing on a seamless user experience, 
 
 - **Dual Public URLs**: Instantly generates secure, public `ngrok` URLs for both the **Tracking Link** and the **Live Dashboard**, making the entire application shareable.
 - **Resilient Architecture**: Uses a non-blocking backend and a production-ready `Waitress` server to prevent crashes and ensure stability.
-- **Accurate Flight Search**: Collects airline and departure date to perform highly reliable flight lookups.
+- **Accurate Flight Search**: Uses the Google Flights API (via SerpApi) with airline, flight number, departure/arrival airports, and date for the most reliable data.
 - **Smart Dashboard Workflow**:
-    - Asks whether to continue monitoring an active trip or start a new one.
-    - Includes a "Reset Trip" button to easily clear old data.
+    - Includes a password-protected "Reset Trip" button to easily clear old data.
 - **Auto-Refreshing Dashboard**: The dashboard automatically refreshes to show the latest data.
 - **Flexible Trip Management**: Allows for multiple start/stop tracking "segments" within a single "trip".
 - **Final Map Image**: Generates a PNG image of the complete trip map when the trip ends.
@@ -47,7 +46,7 @@ The system consists of two main components that run simultaneously:
   pip install -r requirements.txt
   ```
 - **Set API & Ngrok Keys**:
-  - Add your AviationStack API key to the `.env` file: `AVIATIONSTACK_KEY="YOUR_KEY_HERE"`
+  - Add your SerpApi API key to the `.env` file: `SERPAPI_KEY="YOUR_KEY_HERE"`
   - Add your ngrok authtoken to the `ngrok.yml` file. You can get a free token from the [ngrok Dashboard](https://dashboard.ngrok.com/get-started/your-authtoken).
     ```yaml
     # In ngrok.yml

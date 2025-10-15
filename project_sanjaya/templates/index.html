@@ -44,6 +44,14 @@
                 <input type="date" id="departureDate" name="departureDate" required>
             </div>
             <div class="form-group">
+                <label for="depIATA">Departure Airport IATA (e.g., MAA):</label>
+                <input type="text" id="depIATA" name="depIATA" required>
+            </div>
+            <div class="form-group">
+                <label for="arrIATA">Arrival Airport IATA (e.g., BLR):</label>
+                <input type="text" id="arrIATA" name="arrIATA" required>
+            </div>
+            <div class="form-group">
                 <label for="pnr">PNR:</label>
                 <input type="text" id="pnr" name="pnr" required>
             </div>
@@ -100,9 +108,11 @@
             const airlineIATA = airlineSelect.value;
             const flightNumber = document.getElementById('flightNumber').value;
             const departureDate = departureDateInput.value;
+            const depIATA = document.getElementById('depIATA').value;
+            const arrIATA = document.getElementById('arrIATA').value;
             const pnr = document.getElementById('pnr').value;
 
-            if (!name || !airlineIATA || !flightNumber || !departureDate || !pnr) {
+            if (!name || !airlineIATA || !flightNumber || !departureDate || !pnr || !depIATA || !arrIATA) {
                 alert('Please fill in all details.');
                 return;
             }
@@ -115,7 +125,7 @@
             const response = await fetch('/start_trip', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, flightNumber: fullFlightNumber, pnr, departureDate })
+                body: JSON.stringify({ name, flightNumber: fullFlightNumber, pnr, departureDate, depIATA, arrIATA })
             });
 
             if (response.ok) {

@@ -44,8 +44,10 @@ def start_trip():
     trip_info = {
         "trip_id": str(uuid.uuid4()),
         "user_name": data['name'],
-        "flight_number": flight_iata,
+        "flight_number": data['flightNumber'],
         "departure_date": data['departureDate'],
+        "dep_iata": data['depIATA'],
+        "arr_iata": data['arrIATA'],
         "pnr": data.get('pnr', 'N/A'),
         "trip_start_time": datetime.now(timezone.utc).isoformat(),
         "trip_status": "active",
@@ -53,7 +55,7 @@ def start_trip():
         "active_segment_id": None,
         "segments": [],
         "flight_info": {
-            "status": "pending_schedule", # New status for the background thread to pick up
+            "status": "pending_schedule",
             "scheduled_departure": None,
             "scheduled_arrival": None
         }
@@ -202,55 +204,56 @@ def flight_tracker_thread():
             flight_info = trip_info.get("flight_info", {})
             flight_status = flight_info.get("status")
 
-            # --- Task 1: Fetch Schedule for Pending Trips ---
+            # --- Task 1: Fetch Flight Data using SerpApi ---
             if flight_status == "pending_schedule":
-                print(f"Fetching schedule for flight {trip_info['flight_number']}...")
-                flight_iata = trip_info['flight_number']
-                airline_iata = ''.join(filter(str.isalpha, flight_iata))
-                flight_number = ''.join(filter(str.isdigit, flight_iata))
-                flight_schedule = get_flight_data(flight_number=flight_number, departure_date=trip_info['departure_date'], airline_iata=airline_iata)
+                print(f"Fetching flight data for {trip_info['flight_number']}...")
+                flight_data = get_flight_data(
+                    flight_id=trip_info['flight_number'],
+                    dep_iata=trip_info['dep_iata'],
+                    arr_iata=trip_info['arr_iata'],
+                    date=trip_info['departure_date']
+                )
 
-                flight_data_list = flight_schedule.get('data', [])
-                if flight_data_list:
-                    departure_info = flight_data_list[0].get('departure', {})
-                    arrival_info = flight_data_list[0].get('arrival', {})
-                    flight_info["scheduled_departure"] = departure_info.get('scheduled')
-                    flight_info["scheduled_arrival"] = arrival_info.get('scheduled')
-                    flight_info["status"] = "scheduled"
-                    print(f"✅ Schedule fetched for {trip_info['flight_number']}.")
+                if flight_data and "flight_info" in flight_data:
+                    flight_info_data = flight_data["flight_info"]
+                    airplane_tracker = flight_data.get("airplane_tracker", {})
+
+                    flight_info["status"] = flight_info_data.get("status", "scheduled").lower()
+                    flight_info["live_data"] = airplane_tracker.get("live")
+
+                    # Extract schedule from the richer data
+                    departure_info = flight_info_data.get("departure_airport", {})
+                    arrival_info = flight_info_data.get("arrival_airport", {})
+                    flight_info["scheduled_departure"] = departure_info.get("time")
+                    flight_info["scheduled_arrival"] = arrival_info.get("time")
+
+                    print(f"✅ Flight data fetched for {trip_info['flight_number']}.")
                 else:
-                    print(f"⚠️  Could not fetch schedule for {trip_info['flight_number']}. Will retry.")
-                    flight_info["status"] = "schedule_failed" # Mark as failed to avoid retrying too often
+                    print(f"⚠️  Could not fetch flight data for {trip_info['flight_number']}. Will retry.")
+                    flight_info["status"] = "schedule_failed"
 
                 trip_info['flight_info'] = flight_info
                 f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
-                continue # Restart loop to re-read file
+                continue
 
-            # --- Task 2: Monitor Live Flight Status ---
-            if flight_status in ["at_airport", "in_flight"]:
-                now_utc = datetime.now(timezone.utc)
-                departure_time = datetime.fromisoformat(flight_info["scheduled_departure"]) if flight_info.get("scheduled_departure") else None
-                arrival_time = datetime.fromisoformat(flight_info["scheduled_arrival"]) if flight_info.get("scheduled_arrival") else None
+            # --- Task 2: Monitor Live Flight (already fetched) ---
+            if flight_status in ["scheduled", "at_airport", "in_flight"]:
+                live_data = flight_info.get("live_data")
+                if live_data and live_data.get("latitude") and live_data.get("longitude"):
+                    flight_info['status'] = 'in_flight' # Mark as in_flight if we have live data
+                    log_entry = {
+                        "lat": live_data['latitude'], "lon": live_data['longitude'],
+                        "timestamp": datetime.now(timezone.utc).isoformat(), "source": "flight"
+                    }
+                    with open(TRIP_LOG_PATH, "r+") as f_log:
+                        log_data = json.load(f_log); log_data["events"].append(log_entry)
+                        f_log.seek(0); json.dump(log_data, f_log, indent=2)
+                    print(f"Logged flight location from SerpApi: {live_data['latitude']}, {live_data['longitude']}")
 
-                if departure_time and arrival_time and (departure_time - timedelta(minutes=30) < now_utc < arrival_time + timedelta(hours=2)):
-                    print(f"Checking live status for {trip_info['flight_number']}...")
-                    flight_data = get_flight_data(trip_info['flight_number'], trip_info['departure_date'])
+                # Check if flight has landed based on status from initial fetch
+                if flight_info.get("status") == "Landed":
+                    flight_info['status'] = 'landed'
 
-                    if flight_data and flight_data.get('data'):
-                        details = flight_data['data'][0]
-                        live = details.get('live')
-
-                        if details.get('flight_status') == 'active':
-                            flight_info['status'] = 'in_flight'
-                            if live:
-                                log_entry = { "lat": live['latitude'], "lon": live['longitude'], "timestamp": datetime.now(timezone.utc).isoformat(), "source": "flight" }
-                                with open(TRIP_LOG_PATH, "r+") as f_log:
-                                    log_data = json.load(f_log); log_data["events"].append(log_entry)
-                                    f_log.seek(0); json.dump(log_data, f_log, indent=2)
-                        elif details.get('flight_status') == 'landed':
-                            flight_info['status'] = 'landed'
-
-                        trip_info['flight_info'] = flight_info
-                        f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
-
-                    time.sleep(60 * 25) # Wait 25 minutes for next check
+                trip_info['flight_info'] = flight_info
+                f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+                time.sleep(60 * 5) # Check for new live data every 5 mins

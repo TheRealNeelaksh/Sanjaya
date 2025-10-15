@@ -11,3 +11,4 @@ pyngrok
 psutil
 qrcode
 geopy
+google-search-results

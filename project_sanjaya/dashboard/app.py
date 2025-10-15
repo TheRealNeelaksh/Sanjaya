@@ -62,24 +62,37 @@ st.sidebar.title("Trip Details")
 if not trip_info:
     st.sidebar.warning("No active trip. Start a new trip from the web link below.")
 else:
+    # Define paths to local GIFs
+    assets_path = os.path.join(os.path.dirname(__file__), 'assets')
     status_map = {
-        "active": ("🟢 Active", "https://i.gifer.com/ZZ5H.gif"),
-        "ended": ("🔴 Ended", "https://i.gifer.com/56Ab.gif"),
-        "at_airport": ("✈️ At Airport", "https://i.gifer.com/origin/f6/f67139d3c636f26b2786377749a3795b.gif"),
-        "in_flight": ("🛫 In Flight", "https://i.gifer.com/56Ab.gif"),
-        "landed": ("🛬 Landed", "https://i.gifer.com/origin/f6/f67139d3c636f26b2786377749a3795b.gif"),
-        "home": ("🏠 Home", "https://i.gifer.com/6E2.gif"),
-        "scheduled": ("🗓️ Scheduled", None),
-        "pending_schedule": ("⏳ Pending Schedule", None),
-        "schedule_failed": ("⚠️ Schedule Failed", None)
+        "active": ("Tracking Active", os.path.join(assets_path, 'online.gif')),
+        "ended": ("Trip Ended", os.path.join(assets_path, 'offline.gif')),
+        "in_flight": ("In Flight", os.path.join(assets_path, 'airplane.gif')),
+        "home": ("Home", os.path.join(assets_path, 'home.gif')),
+        "at_airport": ("At Airport", None),
+        "landed": ("Landed", None),
+        "scheduled": ("Flight Scheduled", None),
+        "pending_schedule": ("Pending Schedule", None),
+        "schedule_failed": ("Schedule Failed", None)
     }
-    trip_status_text, trip_status_gif = status_map.get(trip_info.get("trip_status"), ("❓ Unknown", None))
-    flight_status_text, _ = status_map.get(trip_info.get("flight_info", {}).get("status"), ("❓ Unknown", None))
 
-    st.sidebar.metric("Trip Status", trip_status_text)
-    if trip_status_gif:
-        st.sidebar.image(trip_status_gif)
-    st.sidebar.info(f"**Flight Status:** {flight_status_text}")
+    trip_status = trip_info.get("trip_status", "ended")
+    flight_status = trip_info.get("flight_info", {}).get("status")
+
+    # Determine overall status
+    display_status = trip_status
+    if flight_status == 'in_flight':
+        display_status = 'in_flight'
+    elif trip_info.get('current_tracking_status') == 'idle' and trip_status == 'active':
+        display_status = 'ended' # Represents offline/idle state
+
+    status_text, status_gif_path = status_map.get(display_status, ("Unknown", None))
+
+    st.sidebar.metric("Status", status_text)
+    if status_gif_path and os.path.exists(status_gif_path):
+        st.sidebar.image(status_gif_path)
+
+    st.sidebar.info(f"**Flight Status:** {status_map.get(flight_status, ('Unknown', None))[0]}")
     st.sidebar.subheader(f"👋 {trip_info.get('user_name', 'Guest')}")
     st.sidebar.write(f"**Flight:** {trip_info.get('flight_number', 'N/A')}")
     st.sidebar.write(f"**PNR:** {trip_info.get('pnr', 'N/A')}")
