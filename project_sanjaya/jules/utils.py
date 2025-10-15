@@ -36,3 +36,17 @@ def check_airport_proximity(user_lat, user_lon):
             return airport
 
     return None
+
+def get_airport_coords(iata_code):
+    """Looks up an airport's coordinates by its IATA code."""
+    if not os.path.exists(AIRPORTS_FILE):
+        return None
+
+    with open(AIRPORTS_FILE, 'r') as f:
+        airports = json.load(f)
+
+    for airport in airports:
+        if airport['iata'] == iata_code:
+            return (airport['lat'], airport['lon'])
+
+    return None

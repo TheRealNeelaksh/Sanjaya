@@ -11,7 +11,7 @@ import uuid
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from jules.utils import check_airport_proximity, haversine_distance
-from jules.aviation import get_flight_data
+from jules.aviationstack_static import get_flight_data
 
 # --- Constants & Configuration ---
 app = Flask(__name__, template_folder='templates')
@@ -123,7 +123,7 @@ def reset_trip():
 
 @app.route('/sync_flight', methods=['POST'])
 def sync_flight():
-    """Forces a manual sync of flight data."""
+    """Forces a manual sync of flight data using the static aviationstack endpoint."""
     if not os.path.exists(TRIP_INFO_PATH):
         return jsonify({"status": "error", "message": "No active trip"}), 404
 
@@ -132,33 +132,18 @@ def sync_flight():
 
         print(f"Manual sync requested for flight {trip_info['flight_number']}...")
         flight_data = get_flight_data(
-            flight_id=trip_info['flight_number'],
-            dep_iata=trip_info['dep_iata'],
-            arr_iata=trip_info['arr_iata'],
+            flight_iata=trip_info['flight_number'],
             date=trip_info['departure_date']
         )
 
-        if flight_data and "flight_info" in flight_data:
-            flight_info_data = flight_data["flight_info"]
-            airplane_tracker = flight_data.get("airplane_tracker", {})
-
-            flight_info = trip_info.get("flight_info", {})
-            flight_info["status"] = flight_info_data.get("status", "scheduled").lower()
-            flight_info["live_data"] = airplane_tracker.get("live")
-
-            departure_info = flight_info_data.get("departure_airport", {})
-            arrival_info = flight_info_data.get("arrival_airport", {})
-            flight_info["scheduled_departure"] = departure_info.get("time")
-            flight_info["scheduled_arrival"] = arrival_info.get("time")
-
-            trip_info['flight_info'] = flight_info
+        if "error" not in flight_data:
+            trip_info['flight_info'] = flight_data
             f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
-
             print(f"✅ Manual sync successful for {trip_info['flight_number']}.")
-            return jsonify({"status": "success", "flight_info": flight_info})
+            return jsonify({"status": "success", "flight_info": flight_data})
         else:
-            print(f"⚠️  Manual sync failed for {trip_info['flight_number']}.")
-            return jsonify({"status": "error", "message": "Could not retrieve flight data."}), 500
+            print(f"⚠️  Manual sync failed for {trip_info['flight_number']}: {flight_data['error']}")
+            return jsonify({"status": "error", "message": flight_data['error']}), 500
 
 from geopy.geocoders import Nominatim
 
@@ -204,47 +189,53 @@ def reached_home_thread():
                         trip_info['trip_status'] = 'home'
                         f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
 
-# --- Smart Flight Tracker ---
+# --- Smart Flight Tracker for AviationStack (Scheduled-only) ---
 def flight_tracker_thread():
-    """Background thread to fetch and update flight status using AeroDataBox."""
+    """Background thread to fetch and update scheduled flight status using AviationStack."""
     print("✈️  Flight tracker thread started.")
     while True:
-        time.sleep(15) # Check for work every 15 seconds
+        time.sleep(15)  # Check every 15 seconds
+
         if not os.path.exists(TRIP_INFO_PATH):
             continue
 
         with open(TRIP_INFO_PATH, "r+") as f:
             trip_info = json.load(f)
 
-            if trip_info.get("trip_status") != "active" or trip_info.get("flight_info", {}).get("status") == "landed":
+            # Skip if trip is not active or already ended
+            if trip_info.get("trip_status") != "active":
                 continue
 
-            print(f"Updating flight data for {trip_info['flight_number']}...")
+            flight_number = trip_info.get("flight_number")
+            departure_date = trip_info.get("departure_date")
+            print(f"Updating scheduled flight data for {flight_number}...")
 
+            from jules.aviationstack_static import get_flight_data
             flight_data = get_flight_data(
-                flight_number=trip_info['flight_number'],
-                flight_date=trip_info['departure_date']
+                airline_iata=None,  # Optional: could parse from flight_number
+                flight_iata=flight_number,
+                date=departure_date
             )
 
             if "error" not in flight_data:
-                trip_info['flight_info'] = flight_data
+                # Update trip_info with scheduled-only data
+                trip_info["flight_info"]["status"] = flight_data.get("status", "scheduled").lower()
+                trip_info["flight_info"]["departure_airport"] = flight_data.get("departure_airport")
+                trip_info["flight_info"]["arrival_airport"] = flight_data.get("arrival_airport")
+                trip_info["flight_info"]["scheduled_departure"] = flight_data.get("departure_scheduled")
+                trip_info["flight_info"]["scheduled_arrival"] = flight_data.get("arrival_scheduled")
+                trip_info["flight_info"]["flight_duration"] = flight_data.get("flight_duration")
+                trip_info["flight_info"]["time_left_to_land"] = flight_data.get("time_left_to_land")
 
-                live_data = flight_data.get('live_data')
-                if live_data and live_data.get('latitude'):
-                    log_entry = {
-                        "lat": live_data['latitude'], "lon": live_data['longitude'],
-                        "timestamp": datetime.now(timezone.utc).isoformat(), "source": "flight"
-                    }
-                    with open(TRIP_LOG_PATH, "r+") as f_log:
-                        log_data = json.load(f_log)
-                        log_data["events"].append(log_entry)
-                        f_log.seek(0); f_log.truncate(); json.dump(log_data, f_log, indent=2)
-
-                f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
-                print(f"✅ Flight data updated for {trip_info['flight_number']}.")
+                f.seek(0)
+                f.truncate()
+                json.dump(trip_info, f, indent=2)
+                print(f"✅ Scheduled flight data updated for {flight_number}.")
             else:
                 print(f"⚠️  {flight_data['error']}")
-                trip_info['flight_info']['status'] = 'failed'
-                f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+                trip_info["flight_info"]["status"] = "failed"
+                f.seek(0)
+                f.truncate()
+                json.dump(trip_info, f, indent=2)
 
-        time.sleep(60 * 10)
+        time.sleep(60 * 10)  # Sleep 10 minutes before next update
