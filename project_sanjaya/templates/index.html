@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jules Tracker - Sanjaya v2.0</title>
+    <title>Jules Tracker - Sanjaya v3.0</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f5f5f5; margin: 0; padding: 1rem; }
         .container { text-align: center; padding: 2rem; background-color: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 400px; width: 100%; }
@@ -11,7 +11,7 @@
         p { color: #666; }
         .form-group { margin-bottom: 1rem; text-align: left; }
         label { font-weight: bold; display: block; margin-bottom: 0.5rem; }
-        input, select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; }
+        input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; }
         button { border: none; padding: 15px 30px; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background-color 0.2s; width: 100%; margin-top: 0.5rem; }
         button:disabled { background-color: #cccccc; cursor: not-allowed; }
         #startTripButton { background-color: #28a745; color: white; }
@@ -30,29 +30,13 @@
                 <label for="name">Your Name:</label>
                 <input type="text" id="name" name="name" required>
             </div>
-            <div class.form-group">
-                <label for="airline">Airline:</label>
-                <select id="airline" name="airline" required></select>
+            <div class="form-group">
+                <label for="departureTime">Departure Time (your local time):</label>
+                <input type="datetime-local" id="departureTime" name="departureTime" required>
             </div>
             <div class="form-group">
-                <label for="flightNumber">Flight Number (e.g., 451):</label>
-                <input type="text" id="flightNumber" name="flightNumber" required>
-            </div>
-            <div class="form-group">
-                <label for="departureDate">Departure Date:</label>
-                <input type="date" id="departureDate" name="departureDate" required>
-            </div>
-            <div class="form-group">
-                <label for="depIATA">Departure Airport IATA (e.g., MAA):</label>
-                <input type="text" id="depIATA" name="depIATA" required>
-            </div>
-            <div class="form-group">
-                <label for="arrIATA">Arrival Airport IATA (e.g., BLR):</label>
-                <input type="text" id="arrIATA" name="arrIATA" required>
-            </div>
-            <div class="form-group">
-                <label for="pnr">PNR:</label>
-                <input type="text" id="pnr" name="pnr" required>
+                <label for="arrivalTime">Arrival Time (your local time):</label>
+                <input type="datetime-local" id="arrivalTime" name="arrivalTime" required>
             </div>
             <button id="startTripButton">Start Trip</button>
         </div>
@@ -76,33 +60,27 @@
 
         let watchId = null;
 
-        // --- Event Listeners ---
-        startTripButton.addEventListener('click', handleStartTrip);
-        stopTripButton.addEventListener('click', handleStopTrip);
-
-        async function handleStartTrip() {
+        startTripButton.addEventListener('click', async () => {
             const name = document.getElementById('name').value;
-            const airlineIATA = document.getElementById('airline').value;
-            const flightNumber = document.getElementById('flightNumber').value;
-            const departureDate = document.getElementById('departureDate').value;
-            const depIATA = document.getElementById('depIATA').value;
-            const arrIATA = document.getElementById('arrIATA').value;
-            const pnr = document.getElementById('pnr').value;
+            const departureTime = document.getElementById('departureTime').value;
+            const arrivalTime = document.getElementById('arrivalTime').value;
 
-            if (!name || !airlineIATA || !flightNumber || !departureDate || !depIATA || !arrIATA || !pnr) {
-                alert('Please fill in all fields.');
+            if (!name || !departureTime || !arrivalTime) {
+                alert('Please fill in all details.');
                 return;
             }
 
             startTripButton.disabled = true;
             statusEl.textContent = 'Status: Initializing trip...';
 
-            const fullFlightNumber = `${airlineIATA}${flightNumber}`;
-
             const response = await fetch('/start_trip', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, flightNumber: fullFlightNumber, pnr, departureDate, depIATA, arrIATA })
+                body: JSON.stringify({
+                    name,
+                    departure_time: new Date(departureTime).toISOString(),
+                    arrival_time: new Date(arrivalTime).toISOString()
+                })
             });
 
             if (response.ok) {
@@ -114,16 +92,16 @@
                 statusEl.textContent = 'Status: Error starting trip.';
                 startTripButton.disabled = false;
             }
-        }
+        });
 
-        async function handleStopTrip() {
+        stopTripButton.addEventListener('click', async () => {
             stopTripButton.disabled = true;
             statusEl.textContent = 'Status: Ending trip...';
             stopGeolocationWatch();
             await fetch('/end_trip', { method: 'POST' });
             statusEl.innerHTML = '<h2>Trip Ended</h2><p>You can now close this window.</p>';
             coordsEl.style.display = 'none';
-        }
+        });
 
         function startGeolocationWatch() {
             if (!navigator.geolocation) { statusEl.textContent = 'Error: Geolocation is not supported.'; return; }

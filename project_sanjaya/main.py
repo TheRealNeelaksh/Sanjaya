@@ -2,7 +2,6 @@ import os
 import json
 import sys
 import time
-import re
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, jsonify
 import uuid
@@ -11,7 +10,7 @@ import uuid
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from jules.utils import check_airport_proximity, haversine_distance
-from jules.aviationstack_static import get_flight_data
+# aviation.py is no longer used
 
 # --- Constants & Configuration ---
 app = Flask(__name__, template_folder='templates')
@@ -25,47 +24,30 @@ def index():
     """Serves the main tracking web page."""
     return render_template('index.html')
 
-@app.route('/airlines')
-def get_airlines():
-    """Provides the list of airlines to the frontend."""
-    with open(os.path.join(os.path.dirname(__file__), 'jules', 'airlines.json')) as f:
-        airlines = json.load(f)
-    return jsonify(airlines)
-
 @app.route('/start_trip', methods=['POST'])
 def start_trip():
-    """Instantly starts a trip and sets it to pending for the background thread."""
+    """Starts a trip with manually provided flight times."""
     data = request.get_json()
-    required_fields = ['name', 'flightNumber', 'pnr', 'departureDate']
+    required_fields = ['name', 'departure_time', 'arrival_time']
     if not data or not all(field in data for field in required_fields):
         return jsonify({"status": "error", "message": "Invalid data"}), 400
-
-    flight_iata = data['flightNumber']
 
     trip_info = {
         "trip_id": str(uuid.uuid4()),
         "user_name": data['name'],
-        "flight_number": data['flightNumber'],
-        "departure_date": data['departureDate'],
-        "dep_iata": data['depIATA'],
-        "arr_iata": data['arrIATA'],
-        "pnr": data.get('pnr', 'N/A'),
         "trip_start_time": datetime.now(timezone.utc).isoformat(),
         "trip_status": "active",
-        "current_tracking_status": "idle",
-        "active_segment_id": None,
-        "segments": [],
         "flight_info": {
-            "status": "pending_schedule",
-            "scheduled_departure": None,
-            "scheduled_arrival": None
+            "status": "scheduled",
+            "scheduled_departure": data['departure_time'],
+            "scheduled_arrival": data['arrival_time']
         }
     }
 
     with open(TRIP_INFO_PATH, "w") as f: json.dump(trip_info, f, indent=2)
     with open(TRIP_LOG_PATH, "w") as f: json.dump({"events": []}, f, indent=2)
 
-    print(f"Trip started for {trip_info['user_name']}. Flight schedule fetched.")
+    print(f"Trip started for {trip_info['user_name']}.")
     return jsonify(trip_info)
 
 @app.route('/log', methods=['POST'])
@@ -73,30 +55,19 @@ def log_location():
     data = request.get_json()
     with open(TRIP_INFO_PATH, "r+") as f_info:
         trip_info = json.load(f_info)
-
         log_entry = { "lat": data['lat'], "lon": data['lon'], "timestamp": datetime.now(timezone.utc).isoformat(), "source": "web" }
-
         with open(TRIP_LOG_PATH, "r+") as f_log:
             log_data = json.load(f_log)
             log_data["events"].append(log_entry)
             f_log.seek(0); json.dump(log_data, f_log, indent=2)
-
-        if trip_info.get("flight_info", {}).get("status") == "scheduled":
-            nearby_airport = check_airport_proximity(data['lat'], data['lon'])
-            if nearby_airport:
-                trip_info["flight_info"]["status"] = "at_airport"
-                trip_info["flight_info"]["detected_airport"] = nearby_airport
-                f_info.seek(0); f_info.truncate(); json.dump(trip_info, f_info, indent=2)
-                print(f"User entered geofence for {nearby_airport['name']}.")
-
     return jsonify({"status": "success"})
 
 @app.route('/end_trip', methods=['POST'])
 def end_trip():
-    # Implementation of map generation will be added in the next step
     with open(TRIP_INFO_PATH, "r+") as f:
         trip_info = json.load(f)
-        trip_info["trip_status"] = "ended"; trip_info["trip_end_time"] = datetime.now(timezone.utc).isoformat()
+        trip_info["trip_status"] = "ended"
+        trip_info["trip_end_time"] = datetime.now(timezone.utc).isoformat()
         f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
     return jsonify(trip_info)
 
@@ -107,13 +78,12 @@ def get_status():
     with open(TRIP_INFO_PATH, "r") as f:
         trip_info = json.load(f)
     return jsonify({
-        "trip_status": trip_info.get("trip_status"), "current_tracking_status": trip_info.get("current_tracking_status"),
+        "trip_status": trip_info.get("trip_status"),
         "flight_status": trip_info.get("flight_info", {}).get("status")
     })
 
 @app.route('/reset_trip', methods=['POST'])
 def reset_trip():
-    """Deletes the current trip's log files."""
     if os.path.exists(TRIP_INFO_PATH):
         os.remove(TRIP_INFO_PATH)
     if os.path.exists(TRIP_LOG_PATH):
@@ -121,121 +91,36 @@ def reset_trip():
     print("Trip data has been reset.")
     return jsonify({"status": "success"})
 
-@app.route('/sync_flight', methods=['POST'])
-def sync_flight():
-    """Forces a manual sync of flight data using the static aviationstack endpoint."""
-    if not os.path.exists(TRIP_INFO_PATH):
-        return jsonify({"status": "error", "message": "No active trip"}), 404
-
-    with open(TRIP_INFO_PATH, "r+") as f:
-        trip_info = json.load(f)
-
-        print(f"Manual sync requested for flight {trip_info['flight_number']}...")
-        flight_data = get_flight_data(
-            flight_iata=trip_info['flight_number'],
-            date=trip_info['departure_date']
-        )
-
-        if "error" not in flight_data:
-            trip_info['flight_info'] = flight_data
-            f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
-            print(f"✅ Manual sync successful for {trip_info['flight_number']}.")
-            return jsonify({"status": "success", "flight_info": flight_data})
-        else:
-            print(f"⚠️  Manual sync failed for {trip_info['flight_number']}: {flight_data['error']}")
-            return jsonify({"status": "error", "message": flight_data['error']}), 500
-
-from geopy.geocoders import Nominatim
-
-# --- "Reached Home" Detector ---
-def reached_home_thread():
-    """
-    A background thread that checks if the user has been stationary in a
-    new state for over 30 minutes, and updates the status to 'home'.
-    """
-    geolocator = Nominatim(user_agent="jules_tracker")
-    print("🏠 Reached home detector thread started.")
+# --- Time-Based Status Updater ---
+def time_based_status_thread():
+    print("⏰ Time-based status updater thread started.")
     while True:
-        time.sleep(60 * 5) # Check every 5 minutes
-        if not os.path.exists(TRIP_INFO_PATH) or not os.path.exists(TRIP_LOG_PATH):
-            continue
-
-        with open(TRIP_INFO_PATH, "r+") as f:
-            trip_info = json.load(f)
-            if trip_info.get("trip_status") != "active":
-                continue
-
-            with open(TRIP_LOG_PATH, "r") as f_log:
-                log_data = json.load(f_log)
-                events = log_data.get("events", [])
-
-            if len(events) < 2:
-                continue
-
-            # Check for stationary period
-            last_event_time = datetime.fromisoformat(events[-1]['timestamp'])
-            if (datetime.now(timezone.utc) - last_event_time) > timedelta(minutes=30):
-
-                # Get start and end locations
-                start_location = geolocator.reverse(f"{events[0]['lat']}, {events[0]['lon']}", language='en')
-                end_location = geolocator.reverse(f"{events[-1]['lat']}, {events[-1]['lon']}", language='en')
-
-                if start_location and end_location:
-                    start_state = start_location.raw.get('address', {}).get('state')
-                    end_state = end_location.raw.get('address', {}).get('state')
-
-                    if start_state and end_state and start_state != end_state:
-                        print(f"✅ User detected as 'home' in new state: {end_state}")
-                        trip_info['trip_status'] = 'home'
-                        f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
-
-# --- Smart Flight Tracker for AviationStack (Scheduled-only) ---
-def flight_tracker_thread():
-    """Background thread to fetch and update scheduled flight status using AviationStack."""
-    print("✈️  Flight tracker thread started.")
-    while True:
-        time.sleep(15)  # Check every 15 seconds
-
+        time.sleep(60) # Check every minute
         if not os.path.exists(TRIP_INFO_PATH):
             continue
 
         with open(TRIP_INFO_PATH, "r+") as f:
             trip_info = json.load(f)
-
-            # Skip if trip is not active or already ended
             if trip_info.get("trip_status") != "active":
                 continue
 
-            flight_number = trip_info.get("flight_number")
-            departure_date = trip_info.get("departure_date")
-            print(f"Updating scheduled flight data for {flight_number}...")
+            flight_info = trip_info.get("flight_info", {})
+            now = datetime.now(timezone.utc)
 
-            from jules.aviationstack_static import get_flight_data
-            flight_data = get_flight_data(
-                airline_iata=None,  # Optional: could parse from flight_number
-                flight_iata=flight_number,
-                date=departure_date
-            )
+            dep_time = datetime.fromisoformat(flight_info['scheduled_departure'])
+            arr_time = datetime.fromisoformat(flight_info['scheduled_arrival'])
+            boarding_time = dep_time - timedelta(minutes=45)
 
-            if "error" not in flight_data:
-                # Update trip_info with scheduled-only data
-                trip_info["flight_info"]["status"] = flight_data.get("status", "scheduled").lower()
-                trip_info["flight_info"]["departure_airport"] = flight_data.get("departure_airport")
-                trip_info["flight_info"]["arrival_airport"] = flight_data.get("arrival_airport")
-                trip_info["flight_info"]["scheduled_departure"] = flight_data.get("departure_scheduled")
-                trip_info["flight_info"]["scheduled_arrival"] = flight_data.get("arrival_scheduled")
-                trip_info["flight_info"]["flight_duration"] = flight_data.get("flight_duration")
-                trip_info["flight_info"]["time_left_to_land"] = flight_data.get("time_left_to_land")
+            new_status = flight_info['status']
+            if boarding_time <= now < dep_time:
+                new_status = 'boarding'
+            elif dep_time <= now < arr_time:
+                new_status = 'in_flight'
+            elif now >= arr_time:
+                new_status = 'landed'
 
-                f.seek(0)
-                f.truncate()
-                json.dump(trip_info, f, indent=2)
-                print(f"✅ Scheduled flight data updated for {flight_number}.")
-            else:
-                print(f"⚠️  {flight_data['error']}")
-                trip_info["flight_info"]["status"] = "failed"
-                f.seek(0)
-                f.truncate()
-                json.dump(trip_info, f, indent=2)
-
-        time.sleep(60 * 10)  # Sleep 10 minutes before next update
+            if new_status != flight_info['status']:
+                flight_info['status'] = new_status
+                trip_info['flight_info'] = flight_info
+                f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+                print(f"Status updated to: {new_status}")

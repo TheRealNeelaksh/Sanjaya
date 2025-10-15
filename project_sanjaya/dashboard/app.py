@@ -68,13 +68,11 @@ else:
     status_map = {
         "active": ("Tracking Active", os.path.join(assets_path, 'online.gif')),
         "ended": ("Trip Ended", os.path.join(assets_path, 'offline.gif')),
+        "boarding": ("Boarding", None),
         "in_flight": ("In Flight", os.path.join(assets_path, 'airplane.gif')),
+        "landed": ("Landed", os.path.join(assets_path, 'online.gif')),
         "home": ("Home", os.path.join(assets_path, 'home.gif')),
-        "at_airport": ("At Airport", None),
-        "landed": ("Landed", None),
-        "scheduled": ("Flight Scheduled", None),
-        "pending_schedule": ("Pending Schedule", None),
-        "schedule_failed": ("Schedule Failed", None)
+        "scheduled": ("Flight Scheduled", None)
     }
 
     trip_status = trip_info.get("trip_status", "ended")
@@ -116,17 +114,23 @@ if not coords:
     m = folium.Map(location=[20.5937, 78.9629], zoom_start=5)
 else:
     m = folium.Map(location=coords[-1], zoom_start=13, tiles="CartoDB positron")
-    ground_coords = [(e['lat'], e['lon']) for e in events if e.get('source') == 'web']
-    if ground_coords: folium.PolyLine(ground_coords, color="#3498db", weight=5, popup="Ground Path").add_to(m)
 
-    # Calculate and draw flight path locally
-    dep_iata = trip_info.get("dep_iata")
-    arr_iata = trip_info.get("arr_iata")
-    if dep_iata and arr_iata:
-        dep_coords = get_airport_coords(dep_iata)
-        arr_coords = get_airport_coords(arr_iata)
-        if dep_coords and arr_coords:
-            folium.PolyLine([dep_coords, arr_coords], color="#f39c12", weight=4, dash_array='10, 5', popup="Flight Path").add_to(m)
+    # Find pre-flight and post-flight ground coordinates
+    dep_time = datetime.fromisoformat(trip_info['flight_info']['scheduled_departure'])
+    arr_time = datetime.fromisoformat(trip_info['flight_info']['scheduled_arrival'])
+
+    pre_flight_coords = [ (e['lat'], e['lon']) for e in events if datetime.fromisoformat(e['timestamp']) < dep_time ]
+    post_flight_coords = [ (e['lat'], e['lon']) for e in events if datetime.fromisoformat(e['timestamp']) > arr_time ]
+
+    if pre_flight_coords:
+        folium.PolyLine(pre_flight_coords, color="#3498db", weight=5, popup="Pre-Flight Path").add_to(m)
+    if post_flight_coords:
+        folium.PolyLine(post_flight_coords, color="#3498db", weight=5, popup="Post-Flight Path").add_to(m)
+
+    # Draw flight path between last and first ground points
+    if pre_flight_coords and post_flight_coords:
+        flight_path = [pre_flight_coords[-1], post_flight_coords[0]]
+        folium.PolyLine(flight_path, color="#f39c12", weight=4, dash_array='10, 5', popup="Flight Path").add_to(m)
     folium.Marker(location=coords[0], popup="Trip Start", icon=folium.Icon(color='green', icon='play')).add_to(m)
     folium.Marker(location=coords[-1], popup=f"Last Location\n{to_ist(events[-1]['timestamp'])}", icon=folium.Icon(color='red', icon='user')).add_to(m)
     m.fit_bounds(m.get_bounds(), padding=(50, 50))
