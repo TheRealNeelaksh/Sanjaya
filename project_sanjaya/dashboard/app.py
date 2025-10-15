@@ -3,7 +3,7 @@ import json
 import folium
 from streamlit_folium import st_folium
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -14,12 +14,12 @@ st.set_page_config(
 )
 
 # --- Constants ---
-LOG_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'session_log.json')
-SESSION_INFO_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'session_info.json')
+TRIP_INFO_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'trip_info.json')
+TRIP_LOG_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'trip_log.json')
+MAP_IMAGE_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'final_trip_map.png')
 
 # --- Helper Functions ---
 def load_json(file_path):
-    """Loads data from a JSON file."""
     if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
         return {}
     try:
@@ -28,79 +28,82 @@ def load_json(file_path):
     except (json.JSONDecodeError, FileNotFoundError):
         return {}
 
-# --- Main Dashboard ---
-st.title("🛰️ Jules Tracker — Project Sanjaya")
-st.markdown("Real-time safety tracking with location and flight visualization.")
+def to_ist(utc_dt_str):
+    """Converts a UTC isoformat string to a user-friendly IST string."""
+    try:
+        utc_dt = datetime.fromisoformat(utc_dt_str.replace("Z", "+00:00"))
+        ist_dt = utc_dt.astimezone(timezone(timedelta(hours=5, minutes=30)))
+        return ist_dt.strftime('%Y-%m-%d %H:%M:%S IST')
+    except (ValueError, TypeError):
+        return "N/A"
 
-# --- Auto-refresh ---
-# Disabled for now as it can be jarring, but can be enabled if needed.
-# st_autorefresh(interval=15000, limit=None, key="dashboard_refresh")
+# --- Main Dashboard ---
+st.title("🛰️ Jules Tracker — Project Sanjaya (Odyssey)")
+st.markdown("Live trip tracking with automated flight detection and multi-segment journey support.")
 
 # --- Data Loading ---
-session_info = load_json(SESSION_INFO_FILE)
-location_data = load_json(LOG_FILE)
-events = location_data.get("events", [])
+trip_info = load_json(TRIP_INFO_FILE)
+trip_log = load_json(TRIP_LOG_FILE)
+events = trip_log.get("events", [])
 coords = [(e["lat"], e["lon"]) for e in events if "lat" in e and "lon" in e]
 
-# --- Sidebar for Session Info ---
-st.sidebar.title(" பயண விவரங்கள் (Trip Details)")
+# --- Sidebar for Trip Info ---
+st.sidebar.title("Trip Details")
 
-if not session_info:
-    st.sidebar.warning("No active session. Start tracking from the web link.")
+if not trip_info:
+    st.sidebar.warning("No active trip. Start a new trip from the web link.")
 else:
     status_map = {
         "active": "🟢 Active",
-        "stopped": "🔴 Stopped",
+        "ended": "🔴 Ended",
         "at_airport": "✈️ At Airport",
         "in_flight": "🛫 In Flight",
-        "landed": "🛬 Landed"
+        "landed": "🛬 Landed",
+        "scheduled": "🗓️ Scheduled"
     }
-    display_status = status_map.get(session_info.get("status", "unknown"), "❓ Unknown")
+    trip_status = status_map.get(trip_info.get("trip_status"), "❓")
+    flight_status = status_map.get(trip_info.get("flight_info", {}).get("status"), "❓")
 
-    st.sidebar.metric("Status", display_status)
-    st.sidebar.subheader(f"👋 Welcome, {session_info.get('user_name', 'Guest')}!")
-    st.sidebar.info(f"**Flight:** {session_info.get('flight_number', 'N/A')}\n\n**PNR:** {session_info.get('pnr', 'N/A')}")
-
-    start_time_str = session_info.get("start_time", "").replace("Z", "")
-    if start_time_str:
-        start_time = datetime.fromisoformat(start_time_str)
-        st.sidebar.write(f"**Session Started:** {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    st.sidebar.metric("Trip Status", trip_status)
+    st.sidebar.info(f"**Flight Status:** {flight_status}")
+    st.sidebar.subheader(f"👋 {trip_info.get('user_name', 'Guest')}")
+    st.sidebar.write(f"**Flight:** {trip_info.get('flight_number', 'N/A')}")
+    st.sidebar.write(f"**PNR:** {trip_info.get('pnr', 'N/A')}")
+    st.sidebar.write(f"**Trip Started:** {to_ist(trip_info.get('trip_start_time'))}")
+    if trip_info.get('trip_status') == 'ended':
+        st.sidebar.write(f"**Trip Ended:** {to_ist(trip_info.get('trip_end_time'))}")
 
 # --- Map Visualization ---
-st.header("Live Location Map")
+st.header("Live Journey Map")
 
 if not coords:
-    st.warning("No location data yet for this session.")
+    st.info("No location data yet for this trip.")
     m = folium.Map(location=[20.5937, 78.9629], zoom_start=5) # Default to India
 else:
     m = folium.Map(location=coords[-1], zoom_start=13, tiles="CartoDB positron")
-    folium.PolyLine(locations=coords, color="#3498db", weight=4, opacity=0.8).add_to(m)
 
-    # Start marker
-    folium.Marker(
-        location=coords[0],
-        popup="Trip Start",
-        icon=folium.Icon(color='green', icon='play')
-    ).add_to(m)
+    # Ground and flight paths
+    ground_coords = [(e['lat'], e['lon']) for e in events if e.get('source') == 'web']
+    flight_coords = [(e['lat'], e['lon']) for e in events if e.get('source') == 'flight']
+    if ground_coords: folium.PolyLine(ground_coords, color="#3498db", weight=5, popup="Ground Path").add_to(m)
+    if flight_coords: folium.PolyLine(flight_coords, color="#f39c12", weight=4, dash_array='10, 5', popup="Flight Path").add_to(m)
 
-    # Current location marker
-    folium.Marker(
-        location=coords[-1],
-        popup=f"Current Location\n{events[-1]['timestamp']}",
-        icon=folium.Icon(color='red', icon='user')
-    ).add_to(m)
+    # Markers
+    folium.Marker(location=coords[0], popup="Trip Start", icon=folium.Icon(color='green', icon='play')).add_to(m)
+    folium.Marker(location=coords[-1], popup=f"Last Location\n{to_ist(events[-1]['timestamp'])}", icon=folium.Icon(color='red', icon='user')).add_to(m)
+    m.fit_bounds(m.get_bounds(), padding=(50, 50))
 
-st_folium(m, width="100%", height=500, returned_objects=[])
+st_folium(m, width="100%", height=500)
 
-# --- Data Display ---
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("Total Points Logged", len(events))
-with col2:
-    if events:
-        last_update_str = events[-1]['timestamp'].replace("Z", "")
-        last_update_time = datetime.fromisoformat(last_update_str)
-        st.metric("📍 Last Update (UTC)", last_update_time.strftime('%H:%M:%S'))
+# --- Summary & Data ---
+if trip_info.get('trip_status') == 'ended':
+    st.header("Trip Summary")
+    if os.path.exists(MAP_IMAGE_FILE):
+        st.image(MAP_IMAGE_FILE, caption="Final Trip Map")
+    else:
+        st.warning("Final map image not generated yet.")
 
 with st.expander("Show Raw Log Data"):
-    st.json(location_data)
+    st.json(trip_log)
+with st.expander("Show Trip Info"):
+    st.json(trip_info)

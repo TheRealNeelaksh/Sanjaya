@@ -2,248 +2,202 @@ import argparse
 import sys
 import os
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import time
 import threading
 from flask import Flask, render_template, request, jsonify
+import uuid
 
 # Ensure the 'jules' module can be found
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from jules.tracker import start_tracking
 from jules.utils import check_airport_proximity, haversine_distance
 from jules.aviation import get_flight_data
+from jules.maps import generate_trip_map, capture_map_screenshot
 
-# --- Background Flight Tracker ---
-def flight_tracker_thread():
-    """
-    A background thread that monitors the session status and
-    activates flight tracking when appropriate.
-    """
-    print("✈️  Flight tracker thread started.")
-    while True:
-        if not os.path.exists(SESSION_INFO_PATH):
-            time.sleep(10)
-            continue
-
-        with open(SESSION_INFO_PATH, "r") as f:
-            session_info = json.load(f)
-
-        # Only track if the status is 'at_airport' or 'in_flight'
-        if session_info.get("status") in ["at_airport", "in_flight"]:
-            flight_iata = session_info.get("flight_number")
-            if not flight_iata:
-                time.sleep(10)
-                continue
-
-            print(f"Checking flight status for {flight_iata}...")
-            flight_data = get_flight_data(flight_iata)
-
-            if flight_data and flight_data.get('data'):
-                flight_details = flight_data['data'][0] # Assuming first result is correct
-                flight_status = flight_details.get('flight_status')
-
-                # --- Update Session Status based on Flight Status ---
-                if flight_status == 'active' and session_info.get("status") != 'in_flight':
-                    print(f"Flight {flight_iata} is now active. Switching to in-flight tracking.")
-                    session_info['status'] = 'in_flight'
-                elif flight_status == 'landed' and session_info.get("status") != 'landed':
-                    print(f"Flight {flight_iata} has landed.")
-                    session_info['status'] = 'landed'
-
-                # --- Log Flight Coordinates ---
-                if flight_status == 'active' and flight_details.get('live'):
-                    live_data = flight_details['live']
-                    log_entry = {
-                        "lat": live_data['latitude'],
-                        "lon": live_data['longitude'],
-                        "altitude": live_data.get('altitude'),
-                        "speed": live_data.get('speed_horizontal'),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "source": "flight"
-                    }
-                    # Append to the main log file
-                    with open(LOG_PATH, "r+") as f:
-                        log_data = json.load(f)
-                        log_data['events'].append(log_entry)
-                        f.seek(0)
-                        json.dump(log_data, f, indent=2)
-                    print(f"Logged flight location: Lat {live_data['latitude']}, Lon {live_data['longitude']}")
-
-                # Write updated session info back
-                with open(SESSION_INFO_PATH, "w") as f:
-                    json.dump(session_info, f, indent=2)
-
-            # Wait for a longer interval to avoid spamming the API
-            time.sleep(60 * 5) # Check every 5 minutes
-        else:
-            # If not in an airport/flight state, check less frequently
-            time.sleep(30)
-
-# --- Flask App ---
+# --- Constants & Configuration ---
 app = Flask(__name__, template_folder='templates')
-LOG_PATH = "logs/session_log.json"
-SESSION_INFO_PATH = "logs/session_info.json" # To store user details
+TRIP_INFO_PATH = "logs/trip_info.json"
+TRIP_LOG_PATH = "logs/trip_log.json"
 
-@app.route('/')
-def index():
-    """Serves the main tracking web page."""
-    return render_template('index.html')
+# --- Trip Management ---
 
-@app.route('/start_session', methods=['POST'])
-def start_session():
-    """Receives user details and initializes a new session."""
+@app.route('/start_trip', methods=['POST'])
+def start_trip():
     data = request.get_json()
     if not data or 'name' not in data or 'flightNumber' not in data:
         return jsonify({"status": "error", "message": "Invalid data"}), 400
 
-    session_info = {
+    # Immediately fetch flight schedule
+    flight_iata = data['flightNumber']
+    flight_schedule = get_flight_data(flight_iata)
+
+    departure_info = flight_schedule.get('data', [{}])[0].get('departure', {})
+    arrival_info = flight_schedule.get('data', [{}])[0].get('arrival', {})
+
+    trip_info = {
+        "trip_id": str(uuid.uuid4()),
         "user_name": data['name'],
-        "flight_number": data['flightNumber'],
+        "flight_number": flight_iata,
         "pnr": data.get('pnr', 'N/A'),
-        "start_time": datetime.now(timezone.utc).isoformat(),
-        "status": "active"
+        "trip_start_time": datetime.now(timezone.utc).isoformat(),
+        "trip_status": "active",
+        "current_tracking_status": "idle",
+        "active_segment_id": None,
+        "segments": [],
+        "flight_info": {
+            "status": "scheduled",
+            "scheduled_departure": departure_info.get('scheduled'),
+            "scheduled_arrival": arrival_info.get('scheduled')
+        }
     }
 
-    # Store session info
-    with open(SESSION_INFO_PATH, "w") as f:
-        json.dump(session_info, f, indent=2)
+    with open(TRIP_INFO_PATH, "w") as f:
+        json.dump(trip_info, f, indent=2)
 
-    # Initialize or clear the session log for the new session
-    with open(LOG_PATH, "w") as f:
+    with open(TRIP_LOG_PATH, "w") as f:
         json.dump({"events": []}, f, indent=2)
 
-    print(f"Session started for {data['name']} with flight {data['flightNumber']}")
-    return jsonify({"status": "success"})
+    print(f"Trip started for {trip_info['user_name']}. Flight schedule fetched.")
+    return jsonify(trip_info)
+
+@app.route('/start_segment', methods=['POST'])
+def start_segment():
+    with open(TRIP_INFO_PATH, "r+") as f:
+        trip_info = json.load(f)
+        new_segment = { "segment_id": str(uuid.uuid4()), "start_time": datetime.now(timezone.utc).isoformat(), "end_time": None, "status": "active" }
+        trip_info["segments"].append(new_segment)
+        trip_info["active_segment_id"] = new_segment["segment_id"]
+        trip_info["current_tracking_status"] = "tracking"
+        f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+    return jsonify(trip_info)
+
+@app.route('/stop_segment', methods=['POST'])
+def stop_segment():
+    with open(TRIP_INFO_PATH, "r+") as f:
+        trip_info = json.load(f)
+        active_segment_id = trip_info["active_segment_id"]
+        for segment in trip_info["segments"]:
+            if segment["segment_id"] == active_segment_id:
+                segment["end_time"] = datetime.now(timezone.utc).isoformat(); segment["status"] = "stopped"; break
+        trip_info["active_segment_id"] = None; trip_info["current_tracking_status"] = "idle"
+        f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+    return jsonify(trip_info)
 
 @app.route('/log', methods=['POST'])
 def log_location():
-    """Receives location data, logs it, and checks for airport proximity."""
     data = request.get_json()
-    if not data or 'lat' not in data or 'lon' not in data:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+    with open(TRIP_INFO_PATH, "r+") as f_info:
+        trip_info = json.load(f_info)
+        active_segment_id = trip_info.get("active_segment_id")
+        if not active_segment_id: return jsonify({"status": "error"}), 400
 
-    user_lat, user_lon = data['lat'], data['lon']
+        log_entry = { "lat": data['lat'], "lon": data['lon'], "timestamp": datetime.now(timezone.utc).isoformat(), "source": "web", "segment_id": active_segment_id }
 
-    log_entry = {
-        "lat": user_lat,
-        "lon": user_lon,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "source": "web"
-    }
+        with open(TRIP_LOG_PATH, "r+") as f_log:
+            log_data = json.load(f_log)
+            log_data["events"].append(log_entry)
+            f_log.seek(0); json.dump(log_data, f_log, indent=2)
 
-    # Load existing location data and append
-    session_data = {"events": []}
-    if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 0:
-        with open(LOG_PATH, "r") as f:
-            try:
-                session_data = json.load(f)
-            except json.JSONDecodeError:
-                pass
+        # --- Geofencing Logic ---
+        if trip_info.get("flight_info", {}).get("status") == "scheduled":
+            nearby_airport = check_airport_proximity(data['lat'], data['lon'])
+            if nearby_airport:
+                trip_info["flight_info"]["status"] = "at_airport"
+                trip_info["flight_info"]["detected_airport"] = nearby_airport
+                f_info.seek(0); f_info.truncate(); json.dump(trip_info, f_info, indent=2)
+                print(f"User entered geofence for {nearby_airport['name']}.")
 
-    session_data["events"].append(log_entry)
-
-    with open(LOG_PATH, "w") as f:
-        json.dump(session_data, f, indent=2)
-
-    # --- Geofencing Logic ---
-    session_info = {}
-    if os.path.exists(SESSION_INFO_PATH):
-        with open(SESSION_INFO_PATH, "r") as f:
-            session_info = json.load(f)
-
-    # Only check if the status is currently 'active' to prevent re-triggering
-    if session_info.get('status') == 'active':
-        nearby_airport = check_airport_proximity(user_lat, user_lon)
-        if nearby_airport:
-            session_info['status'] = 'at_airport'
-            session_info['detected_airport'] = nearby_airport
-            with open(SESSION_INFO_PATH, "w") as f:
-                json.dump(session_info, f, indent=2)
-            print(f"User entered geofence for {nearby_airport['name']}. Status updated.")
-
-    print(f"Logged from web: Lat {user_lat}, Lon {user_lon}")
     return jsonify({"status": "success"})
 
-@app.route('/session_status')
-def session_status():
-    """Provides the current session status to the frontend."""
-    if not os.path.exists(SESSION_INFO_PATH):
-        return jsonify({"status": "inactive"})
+@app.route('/end_trip', methods=['POST'])
+def end_trip():
+    with open(TRIP_INFO_PATH, "r+") as f:
+        trip_info = json.load(f)
+        trip_info["trip_status"] = "ended"
+        trip_info["trip_end_time"] = datetime.now(timezone.utc).isoformat()
+        f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
 
-    with open(SESSION_INFO_PATH, "r") as f:
-        session_info = json.load(f)
+    # --- Generate Final Map Image ---
+    with open(TRIP_LOG_PATH, "r") as f:
+        log_data = json.load(f)
+        events = log_data.get("events", [])
 
-    return jsonify({"status": session_info.get("status", "unknown")})
+    if events:
+        html_path = generate_trip_map(events)
+        if html_path:
+            capture_map_screenshot(html_path)
+            print("Final map image has been generated.")
 
-@app.route('/stop_session', methods=['POST'])
-def stop_session():
-    """Marks the session as complete and generates a trip summary."""
-    session_info = {}
-    if os.path.exists(SESSION_INFO_PATH):
-        with open(SESSION_INFO_PATH, "r") as f:
-            session_info = json.load(f)
+    print(f"Trip ended: {trip_info['trip_id']}.")
+    return jsonify(trip_info)
 
-    session_info['status'] = 'stopped'
-    end_time_iso = datetime.now(timezone.utc).isoformat()
-    session_info['end_time'] = end_time_iso
+@app.route('/status')
+def get_status():
+    with open(TRIP_INFO_PATH, "r") as f:
+        trip_info = json.load(f)
+    return jsonify({
+        "trip_status": trip_info.get("trip_status"),
+        "current_tracking_status": trip_info.get("current_tracking_status"),
+        "flight_status": trip_info.get("flight_info", {}).get("status")
+    })
 
-    with open(SESSION_INFO_PATH, "w") as f:
-        json.dump(session_info, f, indent=2)
+# --- Smart Flight Tracker ---
+def flight_tracker_thread():
+    print("✈️  Smart flight tracker thread started.")
+    while True:
+        if not os.path.exists(TRIP_INFO_PATH):
+            time.sleep(10); continue
 
-    # --- Generate Trip Summary ---
-    location_data = {"events": []}
-    if os.path.exists(LOG_PATH):
-        with open(LOG_PATH, "r") as f:
-            location_data = json.load(f)
+        with open(TRIP_INFO_PATH, "r+") as f:
+            trip_info = json.load(f)
+            flight_info = trip_info.get("flight_info", {})
+            now_utc = datetime.now(timezone.utc)
 
-    events = location_data.get("events", [])
-    total_distance_km = 0
-    if len(events) > 1:
-        for i in range(len(events) - 1):
-            p1 = events[i]
-            p2 = events[i+1]
-            # Only calculate distance for ground points to avoid huge flight jumps
-            if p1.get('source') != 'flight' and p2.get('source') != 'flight':
-                total_distance_km += haversine_distance(p1['lat'], p1['lon'], p2['lat'], p2['lon'])
+            # Only proceed if the trip is active and flight is in a trackable state
+            if trip_info.get("trip_status") != "active" or flight_info.get("status") not in ["at_airport", "in_flight"]:
+                time.sleep(30); continue
 
-    start_time = datetime.fromisoformat(session_info.get('start_time').replace("Z", ""))
-    end_time = datetime.fromisoformat(end_time_iso.replace("Z", ""))
-    duration = end_time - start_time
+            # Check if we are within the flight window
+            departure_time = datetime.fromisoformat(flight_info["scheduled_departure"]) if flight_info.get("scheduled_departure") else None
+            arrival_time = datetime.fromisoformat(flight_info["scheduled_arrival"]) if flight_info.get("scheduled_arrival") else None
 
-    summary = {
-        "user_name": session_info.get('user_name'),
-        "flight_number": session_info.get('flight_number'),
-        "start_time": session_info.get('start_time'),
-        "end_time": end_time_iso,
-        "duration_seconds": duration.total_seconds(),
-        "total_ground_distance_km": round(total_distance_km, 2),
-        "total_points_logged": len(events)
-    }
+            # Only poll API if current time is between departure and arrival + buffer
+            if departure_time and arrival_time and (departure_time - timedelta(minutes=30) < now_utc < arrival_time + timedelta(hours=2)):
+                print(f"Checking flight status for {trip_info['flight_number']}...")
+                flight_data = get_flight_data(trip_info['flight_number'])
 
-    with open("logs/trip_summary.json", "w") as f:
-        json.dump(summary, f, indent=2)
+                if flight_data and flight_data.get('data'):
+                    details = flight_data['data'][0]
+                    live = details.get('live')
 
-    print("Session stopped and summary generated.")
-    return jsonify(summary)
+                    # Update status and log coordinates
+                    if details.get('flight_status') == 'active':
+                        flight_info['status'] = 'in_flight'
+                        if live:
+                            log_entry = { "lat": live['latitude'], "lon": live['longitude'], "timestamp": datetime.now(timezone.utc).isoformat(), "source": "flight" }
+                            with open(TRIP_LOG_PATH, "r+") as f_log:
+                                log_data = json.load(f_log); log_data["events"].append(log_entry)
+                                f_log.seek(0); json.dump(log_data, f_log, indent=2)
+                    elif details.get('flight_status') == 'landed':
+                        flight_info['status'] = 'landed'
 
-# --- Command-Line Interface ---
+                    trip_info['flight_info'] = flight_info
+                    f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
+
+                time.sleep(60 * 25) # Poll every 25 minutes
+            else:
+                time.sleep(60) # Wait a minute if outside the flight window
+
+# --- Main Application Runner ---
 def main():
     parser = argparse.ArgumentParser(description="Project Sanjaya")
-    parser.add_argument("command", choices=["start", "serve"], help="'start' for IP tracking, 'serve' for web UI.")
+    parser.add_argument("command", choices=["serve"], help="serve: Starts the web UI and backend.")
     args = parser.parse_args()
-
-    if args.command == "start":
-        print("🚀 Starting Jules IP Tracker...")
-        start_tracking()
-    elif args.command == "serve":
-        print("🚀 Starting Jules Web Server...")
-        print("🌍 Open the tracking link on your mobile device. Find the URL on your network below.")
-
-        # Start the background thread for flight tracking
+    if args.command == "serve":
+        print("🚀 Starting Jules Web Server for Project Sanjaya...")
         tracker = threading.Thread(target=flight_tracker_thread, daemon=True)
         tracker.start()
-
         app.run(host='0.0.0.0', port=8080)
 
 if __name__ == "__main__":
