@@ -2,7 +2,7 @@ import argparse
 import sys
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 import threading
 from flask import Flask, render_template, request, jsonify
@@ -59,7 +59,7 @@ def flight_tracker_thread():
                         "lon": live_data['longitude'],
                         "altitude": live_data.get('altitude'),
                         "speed": live_data.get('speed_horizontal'),
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                         "source": "flight"
                     }
                     # Append to the main log file
@@ -101,7 +101,7 @@ def start_session():
         "user_name": data['name'],
         "flight_number": data['flightNumber'],
         "pnr": data.get('pnr', 'N/A'),
-        "start_time": datetime.utcnow().isoformat() + "Z",
+        "start_time": datetime.now(timezone.utc).isoformat(),
         "status": "active"
     }
 
@@ -128,7 +128,7 @@ def log_location():
     log_entry = {
         "lat": user_lat,
         "lon": user_lon,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "web"
     }
 
@@ -185,7 +185,7 @@ def stop_session():
             session_info = json.load(f)
 
     session_info['status'] = 'stopped'
-    end_time_iso = datetime.utcnow().isoformat() + "Z"
+    end_time_iso = datetime.now(timezone.utc).isoformat()
     session_info['end_time'] = end_time_iso
 
     with open(SESSION_INFO_PATH, "w") as f:
