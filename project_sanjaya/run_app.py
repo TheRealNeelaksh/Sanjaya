@@ -61,9 +61,14 @@ def run():
         conf.get_default().config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), NGROK_CONFIG_FILE)
 
         print("Starting ngrok tunnels...")
-        flask_tunnel = ngrok.connect(FLASK_PORT, "http")
-        streamlit_tunnel = ngrok.connect(STREAMLIT_PORT, "http")
-        ngrok_tunnels.extend([flask_tunnel, streamlit_tunnel])
+        # Start tunnels in separate threads to avoid blocking
+        flask_tunnel = ngrok.connect(FLASK_PORT, "http", name="flask_app")
+        ngrok_tunnels.append(flask_tunnel)
+        print(f"✅ Flask tunnel started: {flask_tunnel.public_url}")
+
+        streamlit_tunnel = ngrok.connect(STREAMLIT_PORT, "http", name="streamlit_app")
+        ngrok_tunnels.append(streamlit_tunnel)
+        print(f"✅ Streamlit tunnel started: {streamlit_tunnel.public_url}")
 
         print("="*60)
         print(f"📲 PUBLIC TRACKING URL: {flask_tunnel.public_url}")

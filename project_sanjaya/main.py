@@ -123,12 +123,24 @@ def end_trip():
 
 @app.route('/status')
 def get_status():
+    if not os.path.exists(TRIP_INFO_PATH):
+        return jsonify({"trip_status": "none"})
     with open(TRIP_INFO_PATH, "r") as f:
         trip_info = json.load(f)
     return jsonify({
         "trip_status": trip_info.get("trip_status"), "current_tracking_status": trip_info.get("current_tracking_status"),
         "flight_status": trip_info.get("flight_info", {}).get("status")
     })
+
+@app.route('/reset_trip', methods=['POST'])
+def reset_trip():
+    """Deletes the current trip's log files."""
+    if os.path.exists(TRIP_INFO_PATH):
+        os.remove(TRIP_INFO_PATH)
+    if os.path.exists(TRIP_LOG_PATH):
+        os.remove(TRIP_LOG_PATH)
+    print("Trip data has been reset.")
+    return jsonify({"status": "success"})
 
 # --- Smart Flight Tracker ---
 def flight_tracker_thread():

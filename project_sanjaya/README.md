@@ -1,19 +1,22 @@
-# 🛰️ Project Sanjaya — Jules Tracker (v0.5 "Conduit")
+# 🛰️ Project Sanjaya — Jules Tracker (v0.8 "Phoenix")
 
-**A robust, automated, live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
+**A highly robust, automated, live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
 
-This version focuses on stability and a seamless user experience, with a production-ready server, automatic link generation, and a self-refreshing dashboard.
+This is the final, most stable version, focusing on a seamless user experience, resilient architecture, and intuitive controls.
 
 ---
 
 ## 🚀 Features
 
-- **Automatic Public URL**: Instantly generates a secure, public `ngrok` URL for the tracking web page. No more manual IP address sharing!
-- **Auto-Refreshing Dashboard**: The Streamlit dashboard now automatically refreshes every 20 seconds, ensuring you always see the latest data.
-- **Flexible Trip Management**: Start a "Trip," then begin and end multiple "Tracking Segments" within it (e.g., for a drive, then a walk).
-- **Smart Flight Tracking**: Automatically fetches flight schedules and polls for live data only during the flight window to be more efficient.
-- **Full Journey Visualization**: Tracks ground movement (via phone GPS) and air travel (via flight API) and displays the entire path on a single map.
-- **Final Map Image**: Generates a PNG image of the complete trip map upon completion.
+- **Dual Public URLs**: Instantly generates secure, public `ngrok` URLs for both the **Tracking Link** and the **Live Dashboard**, making the entire application shareable.
+- **Resilient Architecture**: Uses a non-blocking backend and a production-ready `Waitress` server to prevent crashes and ensure stability.
+- **Accurate Flight Search**: Collects airline and departure date to perform highly reliable flight lookups.
+- **Smart Dashboard Workflow**:
+    - Asks whether to continue monitoring an active trip or start a new one.
+    - Includes a "Reset Trip" button to easily clear old data.
+- **Auto-Refreshing Dashboard**: The dashboard automatically refreshes to show the latest data.
+- **Flexible Trip Management**: Allows for multiple start/stop tracking "segments" within a single "trip".
+- **Final Map Image**: Generates a PNG image of the complete trip map when the trip ends.
 
 ---
 
