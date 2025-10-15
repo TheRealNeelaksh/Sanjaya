@@ -7,7 +7,7 @@ import threading
 from pyngrok import ngrok, conf
 
 # Import the background thread functions
-from main import flight_tracker_thread, reached_home_thread
+from main import time_based_status_thread, reached_home_thread
 
 # --- Configuration ---
 FLASK_PORT = 5000
@@ -52,9 +52,9 @@ def run():
         print(f"❌ Failed to start Waitress: {e}"); sys.exit(1)
 
     # --- Start Background Threads ---
-    flight_tracker = threading.Thread(target=flight_tracker_thread, daemon=True)
-    flight_tracker.start()
-    print("✅ Flight tracker thread started.")
+    status_updater = threading.Thread(target=time_based_status_thread, daemon=True)
+    status_updater.start()
+    print("✅ Time-based status updater thread started.")
 
     home_detector = threading.Thread(target=reached_home_thread, daemon=True)
     home_detector.start()
