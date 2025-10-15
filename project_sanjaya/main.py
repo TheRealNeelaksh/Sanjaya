@@ -206,13 +206,8 @@ def reached_home_thread():
 
 # --- Smart Flight Tracker ---
 def flight_tracker_thread():
-    """Background thread to fetch and update flight status."""
+    """Background thread to fetch and update flight status using AeroDataBox."""
     print("✈️  Flight tracker thread started.")
-    api_key = os.getenv("AVIATIONSTACK_KEY")
-    if not api_key:
-        print("⚠️  AVIATIONSTACK_KEY not found. Flight tracker will not run.")
-        return
-
     while True:
         time.sleep(15) # Check for work every 15 seconds
         if not os.path.exists(TRIP_INFO_PATH):
@@ -221,27 +216,18 @@ def flight_tracker_thread():
         with open(TRIP_INFO_PATH, "r+") as f:
             trip_info = json.load(f)
 
-            if trip_info.get("trip_status") != "active" or trip_info.get("flight_info", {}).get("status") in ["landed", "ended"]:
+            if trip_info.get("trip_status") != "active" or trip_info.get("flight_info", {}).get("status") == "landed":
                 continue
 
             print(f"Updating flight data for {trip_info['flight_number']}...")
 
-            # Use regex to correctly parse flight number
-            match = re.match(r'([A-Z0-9]{2})(\d+)', trip_info['flight_number'].upper())
-            if not match:
-                print(f"⚠️  Invalid flight format: {trip_info['flight_number']}")
-                continue
-            airline_iata, flight_number = match.groups()
-
             flight_data = get_flight_data(
-                api_key=api_key,
-                airline_iata=airline_iata,
-                flight_number=flight_number,
+                flight_number=trip_info['flight_number'],
                 flight_date=trip_info['departure_date']
             )
 
             if "error" not in flight_data:
-                trip_info['flight_info'] = flight_data # Overwrite with new, rich data
+                trip_info['flight_info'] = flight_data
 
                 live_data = flight_data.get('live_data')
                 if live_data and live_data.get('latitude'):
@@ -258,5 +244,7 @@ def flight_tracker_thread():
                 print(f"✅ Flight data updated for {trip_info['flight_number']}.")
             else:
                 print(f"⚠️  {flight_data['error']}")
+                trip_info['flight_info']['status'] = 'failed'
+                f.seek(0); f.truncate(); json.dump(trip_info, f, indent=2)
 
         time.sleep(60 * 10)
