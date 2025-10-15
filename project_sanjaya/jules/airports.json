@@ -1,0 +1,37 @@
+[
+  {
+    "iata": "MAA",
+    "name": "Chennai International Airport",
+    "lat": 12.9941,
+    "lon": 80.1709,
+    "radius_km": 5
+  },
+  {
+    "iata": "BLR",
+    "name": "Kempegowda International Airport Bengaluru",
+    "lat": 13.1986,
+    "lon": 77.7066,
+    "radius_km": 5
+  },
+  {
+    "iata": "DEL",
+    "name": "Indira Gandhi International Airport",
+    "lat": 28.5562,
+    "lon": 77.1000,
+    "radius_km": 6
+  },
+  {
+    "iata": "BOM",
+    "name": "Chhatrapati Shivaji Maharaj International Airport",
+    "lat": 19.0896,
+    "lon": 72.8656,
+    "radius_km": 5
+  },
+  {
+    "iata": "CCU",
+    "name": "Netaji Subhas Chandra Bose International Airport",
+    "lat": 22.6547,
+    "lon": 88.4467,
+    "radius_km": 5
+  }
+]

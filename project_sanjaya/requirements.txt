@@ -3,3 +3,5 @@ streamlit-folium
 geocoder
 requests
 python-dotenv
+Flask
+gunicorn
