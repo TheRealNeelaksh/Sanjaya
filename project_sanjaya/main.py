@@ -33,8 +33,14 @@ def start_trip():
     flight_iata = data['flightNumber']
     flight_schedule = get_flight_data(flight_iata)
 
-    departure_info = flight_schedule.get('data', [{}])[0].get('departure', {})
-    arrival_info = flight_schedule.get('data', [{}])[0].get('arrival', {})
+    departure_info = {}
+    arrival_info = {}
+    flight_data_list = flight_schedule.get('data', [])
+    if flight_data_list:
+        departure_info = flight_data_list[0].get('departure', {})
+        arrival_info = flight_data_list[0].get('arrival', {})
+    else:
+        print(f"⚠️  Warning: Could not find flight data for {flight_iata}. Proceeding without flight schedule.")
 
     trip_info = {
         "trip_id": str(uuid.uuid4()), "user_name": data['name'], "flight_number": flight_iata,
