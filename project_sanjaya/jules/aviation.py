@@ -1,22 +1,26 @@
 import requests
 from dateutil import parser
-from datetime import timezone
+from datetime import timezone, datetime
+from dotenv import load_dotenv
+import os
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
+BASE_URL = 'https://api.aviationstack.com/v1/flights'
 
 def get_flight_data(api_key, airline_iata, flight_number, flight_date):
     """
-    Fetches and processes flight data from AviationStack.
-    Returns a dictionary with structured flight information.
+    Fetches and processes flight data from AviationStack based on your working script.
     """
     params = {
         'access_key': api_key,
         'airline_iata': airline_iata,
         'flight_number': flight_number,
         'flight_date': flight_date,
-        'limit': 1 # We only want the most relevant flight
+        'limit': 1
     }
 
     try:
-        response = requests.get('http://api.aviationstack.com/v1/flights', params=params, timeout=20)
+        response = requests.get(BASE_URL, params=params, timeout=20)
         response.raise_for_status()
         data = response.json()
 
@@ -25,7 +29,6 @@ def get_flight_data(api_key, airline_iata, flight_number, flight_date):
 
         flight = data['data'][0]
 
-        # Helper to parse time strings safely
         def parse_time(t):
             return parser.parse(t) if t else None
 

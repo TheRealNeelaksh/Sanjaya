@@ -2,6 +2,7 @@ import os
 import json
 import sys
 import time
+import re
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, jsonify
 import uuid
@@ -220,14 +221,17 @@ def flight_tracker_thread():
         with open(TRIP_INFO_PATH, "r+") as f:
             trip_info = json.load(f)
 
-            # Only run for active trips that haven't landed or ended
             if trip_info.get("trip_status") != "active" or trip_info.get("flight_info", {}).get("status") in ["landed", "ended"]:
                 continue
 
             print(f"Updating flight data for {trip_info['flight_number']}...")
 
-            airline_iata = ''.join(filter(str.isalpha, trip_info['flight_number']))
-            flight_number = ''.join(filter(str.isdigit, trip_info['flight_number']))
+            # Use regex to correctly parse flight number
+            match = re.match(r'([A-Z0-9]{2})(\d+)', trip_info['flight_number'].upper())
+            if not match:
+                print(f"⚠️  Invalid flight format: {trip_info['flight_number']}")
+                continue
+            airline_iata, flight_number = match.groups()
 
             flight_data = get_flight_data(
                 api_key=api_key,
@@ -239,7 +243,6 @@ def flight_tracker_thread():
             if "error" not in flight_data:
                 trip_info['flight_info'] = flight_data # Overwrite with new, rich data
 
-                # Log live coordinates if available
                 live_data = flight_data.get('live_data')
                 if live_data and live_data.get('latitude'):
                     log_entry = {
@@ -256,5 +259,4 @@ def flight_tracker_thread():
             else:
                 print(f"⚠️  {flight_data['error']}")
 
-        # Wait before the next full update
         time.sleep(60 * 10)
