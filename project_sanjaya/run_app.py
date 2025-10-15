@@ -7,7 +7,7 @@ import threading
 from pyngrok import ngrok, conf
 
 # Import the background thread functions
-from main import time_based_status_thread, reached_home_thread
+from main import time_based_status_thread
 
 # --- Configuration ---
 FLASK_PORT = 5000
@@ -55,10 +55,6 @@ def run():
     status_updater = threading.Thread(target=time_based_status_thread, daemon=True)
     status_updater.start()
     print("✅ Time-based status updater thread started.")
-
-    home_detector = threading.Thread(target=reached_home_thread, daemon=True)
-    home_detector.start()
-    print("✅ Home detector thread started.")
 
     # --- Configure and start ngrok tunnel for Flask ---
     try:

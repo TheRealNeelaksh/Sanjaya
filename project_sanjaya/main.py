@@ -26,21 +26,17 @@ def index():
 
 @app.route('/start_trip', methods=['POST'])
 def start_trip():
-    """Starts a trip with manually provided flight times."""
-    data = request.get_json()
-    required_fields = ['name', 'departure_time', 'arrival_time']
-    if not data or not all(field in data for field in required_fields):
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
-
+    """Starts a trip with hardcoded flight details."""
     trip_info = {
         "trip_id": str(uuid.uuid4()),
-        "user_name": data['name'],
+        "user_name": "Neelaksh Saxena",
+        "flight_number": "6E451",
         "trip_start_time": datetime.now(timezone.utc).isoformat(),
         "trip_status": "active",
         "flight_info": {
             "status": "scheduled",
-            "scheduled_departure": data['departure_time'],
-            "scheduled_arrival": data['arrival_time']
+            "scheduled_departure": "2025-10-16T16:15:00+00:00", # Hardcoded BLR-LKO schedule
+            "scheduled_arrival": "2025-10-16T18:50:00+00:00"
         }
     }
 
