@@ -94,19 +94,11 @@ else:
 
     st.sidebar.info(f"**Flight Status:** {status_map.get(flight_status, ('Unknown', None))[0]}")
 
-    if flight_status == "schedule_failed":
-        st.sidebar.warning("Automatic flight data sync failed.")
-        if st.sidebar.button("🔄 Retry Manual Sync"):
-            try:
-                response = requests.post("http://localhost:5000/sync_flight")
-                if response.ok:
-                    st.sidebar.success("Sync successful! Refreshing...")
-                    time.sleep(2)
-                    st.rerun()
-                else:
-                    st.sidebar.error("Manual sync failed. Check flight details.")
-            except requests.exceptions.ConnectionError:
-                st.sidebar.error("Could not connect to the backend.")
+    flight_info = trip_info.get("flight_info", {})
+    if flight_info.get("flight_duration"):
+        st.sidebar.write(f"**Est. Duration:** {flight_info['flight_duration']}")
+    if flight_info.get("time_left_to_land"):
+        st.sidebar.write(f"**Time to Land:** {flight_info['time_left_to_land']}")
 
     st.sidebar.subheader(f"👋 {trip_info.get('user_name', 'Guest')}")
     st.sidebar.write(f"**Flight:** {trip_info.get('flight_number', 'N/A')}")

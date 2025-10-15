@@ -1,20 +1,18 @@
-# 🛰️ Project Sanjaya — Jules Tracker (v1.1 "Odyssey")
+# 🛰️ Project Sanjaya — Jules Tracker (v2.0)
 
 **A highly robust, automated, live map dashboard showing your movement from Start → Airport → Flight → Destination → Home — updating in real time and connecting dots visually.**
 
-This is the final, most stable version, using the Google Flights API via SerpApi for maximum reliability.
+This is the final, most stable version, built around a powerful flight tracking engine and a simplified user interface.
 
 ---
 
 ## 🚀 Features
 
-- **Dual Public URLs**: Instantly generates secure, public `ngrok` URLs for both the **Tracking Link** and the **Live Dashboard**, making the entire application shareable.
-- **Resilient Architecture**: Uses a non-blocking backend and a production-ready `Waitress` server to prevent crashes and ensure stability.
-- **Accurate Flight Search**: Uses the Google Flights API (via SerpApi) with airline, flight number, departure/arrival airports, and date for the most reliable data.
-- **Smart Dashboard Workflow**:
-    - Includes a password-protected "Reset Trip" button to easily clear old data.
+- **Robust Flight Tracking**: Uses a powerful, detailed flight tracking engine based on the AviationStack API for reliable data.
+- **Simplified Interface**: A clean, simple web interface with just "Start Trip" and "Stop Trip" buttons.
+- **Rich Dashboard**: The dashboard displays detailed flight information, including flight duration and time left to land.
+- **Automatic Public URL**: Instantly generates a secure, public `ngrok` URL for the tracking web page.
 - **Auto-Refreshing Dashboard**: The dashboard automatically refreshes to show the latest data.
-- **Flexible Trip Management**: Allows for multiple start/stop tracking "segments" within a single "trip".
 - **Final Map Image**: Generates a PNG image of the complete trip map when the trip ends.
 
 ---

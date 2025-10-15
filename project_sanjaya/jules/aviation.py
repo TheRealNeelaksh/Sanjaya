@@ -1,39 +1,66 @@
-import os
-from serpapi import GoogleSearch
-from dotenv import load_dotenv
+import requests
+from dateutil import parser
+from datetime import timezone
 
-# Load environment variables from .env file
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
-
-def get_flight_data(flight_id, dep_iata, arr_iata, date):
+def get_flight_data(api_key, airline_iata, flight_number, flight_date):
     """
-    Fetches flight data from SerpApi's Google Flights API.
-    flight_id is in the format: "6E245"
-    date is in the format: "2025-10-15"
+    Fetches and processes flight data from AviationStack.
+    Returns a dictionary with structured flight information.
     """
-    api_key = os.getenv("SERPAPI_KEY")
-    if not api_key:
-        print("Error: SERPAPI_KEY not found in .env file.")
-        return {}
-
     params = {
-        "api_key": api_key,
-        "engine": "google_flights",
-        "flight_id": f"{flight_id}-{dep_iata}-{arr_iata}-{date}",
-        "hl": "en"
+        'access_key': api_key,
+        'airline_iata': airline_iata,
+        'flight_number': flight_number,
+        'flight_date': flight_date,
+        'limit': 1 # We only want the most relevant flight
     }
 
     try:
-        search = GoogleSearch(params)
-        results = search.get_dict()
+        response = requests.get('http://api.aviationstack.com/v1/flights', params=params, timeout=20)
+        response.raise_for_status()
+        data = response.json()
 
-        # Check for errors in the response
-        if "error" in results:
-            print(f"SerpApi Error: {results['error']}")
-            return {}
+        if 'data' not in data or not data['data']:
+            return {"error": "No flight data found."}
 
-        return results
+        flight = data['data'][0]
 
+        # Helper to parse time strings safely
+        def parse_time(t):
+            return parser.parse(t) if t else None
+
+        dep_sched_dt = parse_time(flight.get('departure', {}).get('scheduled'))
+        arr_sched_dt = parse_time(flight.get('arrival', {}).get('scheduled'))
+        dep_actual_dt = parse_time(flight.get('departure', {}).get('actual'))
+        arr_estimated_dt = parse_time(flight.get('arrival', {}).get('estimated'))
+        now = datetime.now(timezone.utc)
+
+        flight_duration = None
+        if dep_actual_dt and arr_estimated_dt:
+            duration_delta = arr_estimated_dt - dep_actual_dt
+            hours, rem = divmod(duration_delta.total_seconds(), 3600)
+            minutes = rem // 60
+            flight_duration = f"{int(hours)}h {int(minutes)}m"
+
+        time_left = None
+        if arr_estimated_dt and arr_estimated_dt > now:
+            time_left_delta = arr_estimated_dt - now
+            hours, rem = divmod(time_left_delta.total_seconds(), 3600)
+            minutes = rem // 60
+            time_left = f"{int(hours)}h {int(minutes)}m"
+
+        return {
+            "departure_airport": flight.get('departure', {}).get('airport', 'N/A'),
+            "arrival_airport": flight.get('arrival', {}).get('airport', 'N/A'),
+            "departure_scheduled": dep_sched_dt.isoformat() if dep_sched_dt else None,
+            "arrival_scheduled": arr_sched_dt.isoformat() if arr_sched_dt else None,
+            "status": flight.get('flight_status', 'N/A'),
+            "live_data": flight.get('live'),
+            "flight_duration": flight_duration,
+            "time_left_to_land": time_left
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {"error": f"API request failed: {e}"}
     except Exception as e:
-        print(f"An exception occurred while fetching flight data: {e}")
-        return {}
+        return {"error": f"An unexpected error occurred: {e}"}
