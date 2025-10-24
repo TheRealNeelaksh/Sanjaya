@@ -62,7 +62,7 @@ def run():
 
         print("Starting ngrok tunnel for tracking link...")
         global ngrok_tunnel
-        ngrok_tunnel = ngrok.connect(FLASK_PORT, "http")
+        ngrok_tunnel = ngrok.connect("project-sanjaya", "http")
         public_url = ngrok_tunnel.public_url
 
         print("="*60)

@@ -1,2 +1,5 @@
 version: "2"
-authtoken: 345TDCEqfVDnVq8aEoxi2bbnaoo_7aqRprkYmBJCk4ZPixHvi
+tunnels:
+  project-sanjaya:
+    proto: http
+    addr: 5000
