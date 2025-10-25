@@ -87,6 +87,26 @@ def reset_trip():
     print("Trip data has been reset.")
     return jsonify({"status": "success"})
 
+# --- API Endpoint for Frontend ---
+
+@app.route('/api/get_trip_data')
+def get_trip_data():
+    """Provides trip info and log data to the frontend."""
+    trip_info = {}
+    if os.path.exists(TRIP_INFO_PATH):
+        with open(TRIP_INFO_PATH, "r") as f:
+            trip_info = json.load(f)
+
+    trip_log = {"events": []}
+    if os.path.exists(TRIP_LOG_PATH):
+        with open(TRIP_LOG_PATH, "r") as f:
+            trip_log = json.load(f)
+
+    return jsonify({
+        "trip_info": trip_info,
+        "trip_log": trip_log
+    })
+
 # --- Time-Based Status Updater ---
 def time_based_status_thread():
     print("⏰ Time-based status updater thread started.")

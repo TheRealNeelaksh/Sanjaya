@@ -20,19 +20,32 @@ st.set_page_config(
 )
 
 # --- Constants ---
-TRIP_INFO_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'trip_info.json')
-TRIP_LOG_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'trip_log.json')
+# Get the backend URL from an environment variable, with a default for local dev
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
 MAP_IMAGE_FILE = os.path.join(os.path.dirname(__file__), '..', 'logs', 'final_trip_map.png')
 
 # --- Helper Functions ---
-def load_json(file_path):
-    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-        return {}
+def load_data_from_api():
+    """Fetches the latest trip data from the backend API."""
     try:
-        with open(file_path, "r") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
+        api_url = f"{BACKEND_URL}/api/get_trip_data"
+        response = requests.get(api_url, timeout=5)
+        response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+        data = response.json()
+
+        # The API returns an object with 'trip_info' and 'trip_log' keys
+        trip_info = data.get("trip_info", {})
+        trip_log = data.get("trip_log", {"events": []})
+
+        return trip_info, trip_log
+
+    except requests.exceptions.RequestException:
+        # Silently fail on connection errors, returning empty data.
+        # This prevents the dashboard from crashing if the backend is temporarily down.
+        return {}, {"events": []}
+    except json.JSONDecodeError:
+        st.error("Error decoding data from the backend.")
+        return {}, {"events": []}
 
 def to_ist(utc_dt_str):
     """Converts a UTC isoformat string to a user-friendly IST string."""
@@ -47,13 +60,12 @@ def to_ist(utc_dt_str):
 st.title("🛰️ Jules Tracker — Project Sanjaya (Keystone)")
 st.markdown("Live trip tracking with automated flight detection and multi-segment journey support.")
 
-# --- Auto-refresh for active monitoring ---
-trip_info = load_json(TRIP_INFO_FILE)
+# --- Data Loading & Auto-Refresh ---
+trip_info, trip_log = load_data_from_api()
+
 if not trip_info or trip_info.get("trip_status") == "active":
     st_autorefresh(interval=20 * 1000, key="dashboard_refresh")
 
-# --- Data Loading ---
-trip_log = load_json(TRIP_LOG_FILE)
 events = trip_log.get("events", [])
 coords = [(e["lat"], e["lon"]) for e in events if "lat" in e and "lon" in e]
 
@@ -61,7 +73,7 @@ coords = [(e["lat"], e["lon"]) for e in events if "lat" in e and "lon" in e]
 st.sidebar.title("Trip Details")
 
 if not trip_info:
-    st.sidebar.warning("No active trip. Start a new trip from the web link below.")
+    st.sidebar.warning("No active trip. Waiting for data from the backend...")
 else:
     # Define paths to local GIFs
     assets_path = os.path.join(os.path.dirname(__file__), 'assets')
@@ -171,14 +183,12 @@ if is_admin:
     st.sidebar.subheader("Admin Actions")
     if st.sidebar.button("🗑️ Reset Trip Data"):
         try:
-            response = requests.post("http://localhost:5000/reset_trip")
-            if response.ok:
-                st.sidebar.success("Trip data has been reset!")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.sidebar.error("Failed to reset trip.")
-        except requests.exceptions.ConnectionError:
-            st.sidebar.error("Could not connect to the backend.")
+            reset_url = f"{BACKEND_URL}/reset_trip"
+            response = requests.post(reset_url)
+            response.raise_for_status()
+            st.sidebar.success("Trip data has been reset!")
+            st_autorefresh(interval=1, limit=2, key="reset_refresh") # A quick refresh to show the result
+        except requests.exceptions.RequestException as e:
+            st.sidebar.error(f"Error: {e}")
 else:
     st.sidebar.info("Add `?a=neelaksh` to the URL for admin actions like resetting a trip.")
