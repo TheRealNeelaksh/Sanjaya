@@ -21,10 +21,35 @@ def manage_users():
     # TODO: Implement user creation, deletion, etc.
     st.write("Coming soon...")
 
+def get_users(role):
+    response = requests.get(f"{API_URL}/users?role={role}", headers=get_headers())
+    if response.status_code == 200:
+        return [user['username'] for user in response.json()]
+    return []
+
 def link_parent_child():
     st.subheader("Link Parent to Child")
-    # TODO: Implement logic to link parent and child accounts
-    st.write("Coming soon...")
+
+    parents = get_users('parent')
+    children = get_users('child')
+
+    if not parents or not children:
+        st.warning("No parents or children available to link.")
+        return
+
+    parent_username = st.selectbox("Select Parent", parents)
+    child_username = st.selectbox("Select Child", children)
+
+    if st.button("Link Parent to Child"):
+        response = requests.post(
+            f"{API_URL}/link-parent-child",
+            headers=get_headers(),
+            json={"parent_username": parent_username, "child_username": child_username}
+        )
+        if response.status_code == 200:
+            st.success("Parent and child linked successfully.")
+        else:
+            st.error(f"Error linking parent and child: {response.json()['detail']}")
 
 def manage_trips():
     st.subheader("Trip Management")

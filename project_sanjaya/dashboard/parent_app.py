@@ -19,9 +19,10 @@ def get_headers():
     return {"Authorization": f"Bearer {st.session_state.token}"}
 
 def get_linked_children():
-    # TODO: Implement API endpoint to get linked children
-    # For now, returning a mock list
-    return ["child1", "child2"]
+    response = requests.get(f"{API_URL}/linked-children", headers=get_headers())
+    if response.status_code == 200:
+        return [user['username'] for user in response.json()]
+    return []
 
 def get_live_trip_data(username):
     # TODO: Implement API endpoint to get live trip data

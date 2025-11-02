@@ -102,40 +102,33 @@ def sync_data(sync_data: schemas.SyncData, db: Session = Depends(get_db), curren
     return {"status": "success", "synced_points": len(sync_data.points)}
 
 @app.get("/users", response_model=list[schemas.User])
-def list_users(db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
-    users = db.query(models.User).all()
+def list_users(role: str = None, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
+    if role:
+        users = db.query(models.User).filter(models.User.role == role).all()
+    else:
+        users = db.query(models.User).all()
     return users
 
-@app.delete("/users/{username}")
-def delete_user(username: str, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
-    user = db.query(models.User).filter(models.User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    db.delete(user)
+@app.post("/link-parent-child")
+def link_parent_child(link: schemas.ParentChildLink, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
+    parent = db.query(models.User).filter(models.User.username == link.parent_username).first()
+    child = db.query(models.User).filter(models.User.username == link.child_username).first()
+
+    if not parent or not child:
+        raise HTTPException(status_code=404, detail="Parent or child not found")
+
+    if parent.role != 'parent' or child.role != 'child':
+        raise HTTPException(status_code=400, detail="Invalid roles for parent or child")
+
+    parent_child_link = models.ParentChild(parent_id=parent.id, child_id=child.id)
+    db.add(parent_child_link)
     db.commit()
-    return {"status": "success", "message": f"User '{username}' deleted"}
+    return {"status": "success", "message": "Parent and child linked successfully"}
 
-@app.put("/users/password")
-def change_password(password_change: schemas.PasswordChange, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
-    user = db.query(models.User).filter(models.User.username == password_change.username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+@app.get("/linked-children", response_model=list[schemas.User])
+def get_linked_children(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    if current_user.role != 'parent':
+        raise HTTPException(status_code=403, detail="Only parents can view linked children")
 
-    user.password_hash = auth.hash_password(password_change.new_password)
-    db.commit()
-    return {"status": "success", "message": "Password changed"}
-
-@app.put("/users/{username}/change-username")
-def change_username(username: str, username_change: schemas.UsernameChange, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
-    user = db.query(models.User).filter(models.User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Check if the new username is already taken
-    db_user = db.query(models.User).filter(models.User.username == username_change.new_username).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-
-    user.username = username_change.new_username
-    db.commit()
-    return {"status": "success", "message": "Username changed"}
+    linked_children = db.query(models.User).join(models.ParentChild, models.User.id == models.ParentChild.child_id).filter(models.ParentChild.parent_id == current_user.id).all()
+    return linked_children

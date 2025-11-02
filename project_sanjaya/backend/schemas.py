@@ -35,12 +35,9 @@ class User(BaseModel):
     class Config:
         orm_mode = True
 
-class PasswordChange(BaseModel):
-    username: str
-    new_password: str
-
-class UsernameChange(BaseModel):
-    new_username: str
+class ParentChildLink(BaseModel):
+    parent_username: str
+    child_username: str
 
 class SyncData(BaseModel):
     session_hash: str
