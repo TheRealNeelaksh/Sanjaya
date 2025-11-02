@@ -54,7 +54,19 @@ pip install -r requirements.txt
 
 ### 3. Running the Application
 
-The application consists of three main components that need to be run in separate terminals:
+#### Quick Start (Recommended)
+
+To launch all services at once, simply run the `run_all.py` script from the root of the `project_sanjaya` directory:
+
+```bash
+python project_sanjaya/run_all.py
+```
+
+This will start the backend server, the ngrok tunnel, and all three Streamlit dashboards. The script will print the URLs for each dashboard.
+
+#### Manual Startup
+
+If you prefer to run each component separately, you can follow these steps. You will need to run each command in a separate terminal.
 
 **a. Start the backend server:**
 
