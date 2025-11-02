@@ -1,5 +1,0 @@
-version: "2"
-tunnels:
-  project-sanjaya:
-    proto: http
-    addr: 5000
