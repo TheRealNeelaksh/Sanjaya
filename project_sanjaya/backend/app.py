@@ -100,3 +100,42 @@ def sync_data(sync_data: schemas.SyncData, db: Session = Depends(get_db), curren
 
     db.commit()
     return {"status": "success", "synced_points": len(sync_data.points)}
+
+@app.get("/users", response_model=list[schemas.User])
+def list_users(db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
+    users = db.query(models.User).all()
+    return users
+
+@app.delete("/users/{username}")
+def delete_user(username: str, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
+    return {"status": "success", "message": f"User '{username}' deleted"}
+
+@app.put("/users/password")
+def change_password(password_change: schemas.PasswordChange, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
+    user = db.query(models.User).filter(models.User.username == password_change.username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = auth.hash_password(password_change.new_password)
+    db.commit()
+    return {"status": "success", "message": "Password changed"}
+
+@app.put("/users/{username}/change-username")
+def change_username(username: str, username_change: schemas.UsernameChange, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Check if the new username is already taken
+    db_user = db.query(models.User).filter(models.User.username == username_change.new_username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+
+    user.username = username_change.new_username
+    db.commit()
+    return {"status": "success", "message": "Username changed"}

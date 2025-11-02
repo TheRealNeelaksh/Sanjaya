@@ -27,6 +27,21 @@ class LocationUpdate(BaseModel):
     battery: Optional[float] = None
     timestamp: Optional[datetime.datetime] = None
 
+class User(BaseModel):
+    id: int
+    username: str
+    role: str
+
+    class Config:
+        orm_mode = True
+
+class PasswordChange(BaseModel):
+    username: str
+    new_password: str
+
+class UsernameChange(BaseModel):
+    new_username: str
+
 class SyncData(BaseModel):
     session_hash: str
     points: List[LocationUpdate]
