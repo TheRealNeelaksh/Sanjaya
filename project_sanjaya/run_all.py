@@ -2,8 +2,13 @@ import subprocess
 import sys
 import time
 import os
-from project_sanjaya.backend.database import SessionLocal
+from project_sanjaya.backend.database import SessionLocal, engine
+from project_sanjaya.backend.models import Base
 from project_sanjaya.backend.auth import admin_user_exists, register_user
+
+def init_db():
+    """Creates all database tables."""
+    Base.metadata.create_all(bind=engine)
 
 def create_admin_if_not_exists():
     """Checks if an admin user exists and creates one if not."""
@@ -75,5 +80,6 @@ def run_commands():
         sys.exit(0)
 
 if __name__ == "__main__":
+    init_db()
     create_admin_if_not_exists()
     run_commands()
