@@ -61,12 +61,24 @@ def run_commands():
     try:
         # Wait for ngrok URL
         ngrok_url = ""
-        for line in iter(processes["Ngrok"].stdout.readline, b''):
+        start_time = time.time()
+        while time.time() - start_time < 20: # 20 second timeout
+            line = processes["Ngrok"].stdout.readline()
+            if not line:
+                break
             line_str = line.decode('utf-8').strip()
             print(line_str)
             if "ngrok tunnel available at" in line_str:
                 ngrok_url = line_str.split("at ")[-1]
                 break
+
+        if not ngrok_url:
+            print("\n❌ ERROR: Could not get ngrok URL after 20 seconds.")
+            print("Please check your ngrok configuration and internet connection.")
+            # Terminate already running processes
+            for name, process in processes.items():
+                process.terminate()
+            sys.exit(1)
 
         # Set API_URL and start Streamlit app
         env = os.environ.copy()
