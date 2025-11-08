@@ -50,7 +50,10 @@ def login_user(db: Session, username: str, password: str):
     """Logs in a user and returns a JWT token."""
     user = db.query(models.User).filter(models.User.username == username).first()
     if user and verify_password(password, user.password_hash):
-        return create_jwt_token(data={"sub": user.username, "role": user.role})
+        if user.role == 'child':
+            return create_jwt_token(data={"sub": user.username, "role": user.role}, expires_delta=timedelta(hours=24))
+        else:
+            return create_jwt_token(data={"sub": user.username, "role": user.role})
     return None
 
 from fastapi import Depends, HTTPException, status
@@ -83,5 +86,9 @@ def get_current_admin_user(current_user: models.User = Depends(get_current_user)
             detail="The user is not an admin",
         )
     return current_user
+
+def admin_user_exists(db: Session) -> bool:
+    """Checks if an admin user exists."""
+    return db.query(models.User).filter(models.User.role == "admin").first() is not None
 
 # TODO: Add more robust error handling and user feedback.

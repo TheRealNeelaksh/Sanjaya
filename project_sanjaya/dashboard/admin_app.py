@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
+import os
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(layout="wide")
 
@@ -18,8 +19,23 @@ def get_headers():
 
 def manage_users():
     st.subheader("User Management")
-    # TODO: Implement user creation, deletion, etc.
-    st.write("Coming soon...")
+    with st.expander("Create a new user"):
+        with st.form("create_user_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            role = st.selectbox("Role", ["parent", "child"])
+            submitted = st.form_submit_button("Create User")
+
+            if submitted:
+                response = requests.post(
+                    f"{API_URL}/register",
+                    headers=get_headers(),
+                    json={"username": username, "password": password, "role": role}
+                )
+                if response.status_code == 200:
+                    st.success(f"User '{username}' created successfully.")
+                else:
+                    st.error(f"Error creating user: {response.json()['detail']}")
 
 def get_users(role):
     response = requests.get(f"{API_URL}/users?role={role}", headers=get_headers())

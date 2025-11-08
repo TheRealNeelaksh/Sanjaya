@@ -39,6 +39,14 @@ class ParentChildLink(BaseModel):
     parent_username: str
     child_username: str
 
+class ChildStatus(BaseModel):
+    username: str
+    last_seen: datetime.datetime
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    battery: Optional[float] = None
+    connection_status: str
+
 class SyncData(BaseModel):
     session_hash: str
     points: List[LocationUpdate]

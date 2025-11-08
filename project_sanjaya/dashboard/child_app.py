@@ -11,7 +11,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from dashboard import maps
 
-API_URL = "http://127.0.0.1:8000"  # Assuming the backend is running locally
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
 CACHE_FILE = "project_sanjaya/logs/cached_points.json"
 
 st.set_page_config(layout="wide")
@@ -113,6 +113,11 @@ def main():
                 st.error("Invalid credentials.")
     else:
         st.subheader(f"Welcome, {st.session_state.username}!")
+
+        if st.button("Logout"):
+            del st.session_state.token
+            st.rerun()
+
         geofence_editor()
 
         st.subheader("Start Tracking")
@@ -136,6 +141,15 @@ def main():
         if "session_hash" in st.session_state:
             st.subheader("Live Tracking")
             st.write(f"Session Hash: {st.session_state.session_hash}")
+
+            # TODO: Implement browser API integration for live location and battery data.
+            st.warning("Live location and battery data are not yet implemented in the browser.")
+
+            # Send heartbeat
+            if "last_heartbeat" not in st.session_state or time.time() - st.session_state.last_heartbeat > 30:
+                requests.post(f"{API_URL}/heartbeat", headers=get_headers())
+                st.session_state.last_heartbeat = time.time()
+
             # This is a placeholder for real location data
             update_location(34.0522, -118.2437, 80.0)
 

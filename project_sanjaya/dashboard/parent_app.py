@@ -2,8 +2,9 @@ import streamlit as st
 import requests
 import folium
 from streamlit_folium import st_folium
+import os
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(layout="wide")
 
@@ -24,19 +25,11 @@ def get_linked_children():
         return [user['username'] for user in response.json()]
     return []
 
-def get_live_trip_data(username):
-    # TODO: Implement API endpoint to get live trip data
-    # For now, returning mock data
-    return {
-        "locations": [
-            {"lat": 34.0522, "lon": -118.2437},
-            {"lat": 34.0622, "lon": -118.2537},
-            {"lat": 34.0722, "lon": -118.2637},
-        ],
-        "status": "Travelling",
-        "last_update": "2024-10-16 10:30:00",
-        "battery": "75%",
-    }
+def get_child_status(username):
+    response = requests.get(f"{API_URL}/child-status/{username}", headers=get_headers())
+    if response.status_code == 200:
+        return response.json()
+    return None
 
 def display_map(locations):
     if not locations:
@@ -70,15 +63,21 @@ def main():
         selected_child = st.selectbox("Select a child to track:", children)
 
         if selected_child:
-            trip_data = get_live_trip_data(selected_child)
+            child_status = get_child_status(selected_child)
 
-            col1, col2 = st.columns(2)
-            with col1:
-                display_map(trip_data["locations"])
-            with col2:
-                st.metric("Status", trip_data["status"])
-                st.metric("Last Update", trip_data["last_update"])
-                st.metric("Battery", trip_data["battery"])
+            if child_status:
+                col1, col2 = st.columns(2)
+                with col1:
+                    if child_status["latitude"] and child_status["longitude"]:
+                        display_map([{"lat": child_status["latitude"], "lon": child_status["longitude"]}])
+                    else:
+                        st.warning("No location data available.")
+                with col2:
+                    st.metric("Connection Status", child_status["connection_status"])
+                    st.metric("Last Seen", child_status["last_seen"])
+                    st.metric("Battery", f"{child_status['battery']}%" if child_status['battery'] else "N/A")
+            else:
+                st.error("Could not retrieve child status.")
 
 if __name__ == "__main__":
     main()

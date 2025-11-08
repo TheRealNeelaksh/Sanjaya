@@ -12,15 +12,19 @@ app = FastAPI()
 def read_root():
     return {"message": "Welcome to Project Sanjaya API"}
 
-@app.post("/register", response_model=schemas.Token)
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+import random
+
+@app.post("/register", response_model=schemas.User)
+def register(user: schemas.UserCreate, db: Session = Depends(get_db), current_admin: models.User = Depends(auth.get_current_admin_user)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
+        if user.role == "child":
+            user.username = f"{user.username}_{random.randint(1000, 9999)}"
+        else:
+            raise HTTPException(status_code=400, detail="Username already registered")
 
     new_user = auth.register_user(db=db, username=user.username, password=user.password, role=user.role)
-    access_token = auth.create_jwt_token(data={"sub": new_user.username, "role": new_user.role})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return new_user
 
 @app.post("/login", response_model=schemas.Token)
 def login(form_data: schemas.UserLogin, db: Session = Depends(get_db)):
@@ -120,6 +124,12 @@ def link_parent_child(link: schemas.ParentChildLink, db: Session = Depends(get_d
     if parent.role != 'parent' or child.role != 'child':
         raise HTTPException(status_code=400, detail="Invalid roles for parent or child")
 
+    # Enforce relationship constraints
+    if len(parent.children) >= 2:
+        raise HTTPException(status_code=400, detail="Parent already has 2 children")
+    if len(child.parents) >= 2:
+        raise HTTPException(status_code=400, detail="Child already has 2 parents")
+
     parent_child_link = models.ParentChild(parent_id=parent.id, child_id=child.id)
     db.add(parent_child_link)
     db.commit()
@@ -132,3 +142,36 @@ def get_linked_children(db: Session = Depends(get_db), current_user: models.User
 
     linked_children = db.query(models.User).join(models.ParentChild, models.User.id == models.ParentChild.child_id).filter(models.ParentChild.parent_id == current_user.id).all()
     return linked_children
+
+@app.post("/heartbeat")
+def heartbeat(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    current_user.last_seen = datetime.datetime.utcnow()
+    db.commit()
+    return {"status": "success"}
+
+@app.get("/child-status/{username}", response_model=schemas.ChildStatus)
+def get_child_status(username: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    if current_user.role != 'parent':
+        raise HTTPException(status_code=403, detail="Only parents can view child status")
+
+    child = db.query(models.User).filter(models.User.username == username).first()
+    if not child:
+        raise HTTPException(status_code=404, detail="Child not found")
+
+    # Check if the current user is a parent of the child
+    link = db.query(models.ParentChild).filter(models.ParentChild.parent_id == current_user.id, models.ParentChild.child_id == child.id).first()
+    if not link:
+        raise HTTPException(status_code=403, detail="Not authorized to view this child's status")
+
+    latest_location = db.query(models.Location).join(models.Trip).filter(models.Trip.user_id == child.id).order_by(models.Location.timestamp.desc()).first()
+
+    connection_status = "online" if (datetime.datetime.utcnow() - child.last_seen).total_seconds() < 60 else "offline"
+
+    return schemas.ChildStatus(
+        username=child.username,
+        last_seen=child.last_seen,
+        latitude=latest_location.latitude if latest_location else None,
+        longitude=latest_location.longitude if latest_location else None,
+        battery=latest_location.battery if latest_location else None,
+        connection_status=connection_status
+    )

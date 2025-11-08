@@ -2,6 +2,19 @@ import subprocess
 import sys
 import time
 import os
+from project_sanjaya.backend.database import SessionLocal
+from project_sanjaya.backend.auth import admin_user_exists, register_user
+
+def create_admin_if_not_exists():
+    """Checks if an admin user exists and creates one if not."""
+    db = SessionLocal()
+    if not admin_user_exists(db):
+        print("Admin user not found. Creating a new one...")
+        print("Please set a password for the admin user.")
+        password = input("Enter password: ")
+        register_user(db, "admin", password, "admin")
+        print("Admin user created successfully.")
+    db.close()
 
 def run_commands():
     """
@@ -37,13 +50,16 @@ def run_commands():
 
     try:
         # Wait for ngrok to print its URL
-        # This is a bit of a hack, but it works for this prototype
-        ngrok_output = ""
+        ngrok_url = ""
         for line in iter(processes["Ngrok"].stdout.readline, b''):
             line_str = line.decode('utf-8').strip()
             print(line_str) # Print ngrok output in real-time
             if "ngrok tunnel available at" in line_str:
+                ngrok_url = line_str.split("at ")[-1]
                 break
+
+        # Set the ngrok URL as an environment variable for the Streamlit apps
+        os.environ["API_URL"] = ngrok_url
 
         # Keep the main script alive
         while True:
@@ -59,4 +75,5 @@ def run_commands():
         sys.exit(0)
 
 if __name__ == "__main__":
+    create_admin_if_not_exists()
     run_commands()

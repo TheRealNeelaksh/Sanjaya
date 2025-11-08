@@ -10,6 +10,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)  # 'child', 'parent', 'admin'
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships
     trips = relationship("Trip", back_populates="user")
