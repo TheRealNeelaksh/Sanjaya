@@ -14,16 +14,6 @@ from dashboard import maps
 API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
 CACHE_FILE = "project_sanjaya/logs/cached_points.json"
 
-st.set_page_config(layout="wide")
-
-def login_user(username, password):
-    response = requests.post(f"{API_URL}/login", json={"username": username, "password": password})
-    if response.status_code == 200:
-        st.session_state.token = response.json()["access_token"]
-        st.session_state.username = username
-        return True
-    return False
-
 def get_headers():
     return {"Authorization": f"Bearer {st.session_state.token}"}
 
@@ -101,57 +91,43 @@ def geofence_editor():
 
 def main():
     st.title("Child Dashboard")
+    st.subheader(f"Welcome, {st.session_state.username}!")
 
-    if 'token' not in st.session_state:
-        st.subheader("Login")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if login_user(username, password):
-                st.rerun()
-            else:
-                st.error("Invalid credentials.")
-    else:
-        st.subheader(f"Welcome, {st.session_state.username}!")
+    if st.button("Logout"):
+        del st.session_state.token
+        st.rerun()
 
-        if st.button("Logout"):
-            del st.session_state.token
-            st.rerun()
+    geofence_editor()
 
-        geofence_editor()
+    st.subheader("Start Tracking")
+    if st.button("Start College Tracking"):
+        if start_trip("college"):
+            st.success("College tracking started.")
+        else:
+            st.error("Failed to start college tracking.")
 
-        st.subheader("Start Tracking")
-        if st.button("Start College Tracking"):
-            if start_trip("college"):
-                st.success("College tracking started.")
-            else:
-                st.error("Failed to start college tracking.")
+    with st.expander("Start Trip Tracking"):
+        trip_type = st.selectbox("Trip Type", ["Flight", "Train", "Road"])
+        if trip_type == "Flight":
+            flight_iata = st.text_input("Flight IATA Number")
+            if st.button("Start Flight Trip"):
+                if start_trip("flight", {"flight_iata": flight_iata}):
+                    st.success("Flight trip started.")
+                else:
+                    st.error("Failed to start flight trip.")
+        # TODO: Add forms for Train and Road trips
 
-        with st.expander("Start Trip Tracking"):
-            trip_type = st.selectbox("Trip Type", ["Flight", "Train", "Road"])
-            if trip_type == "Flight":
-                flight_iata = st.text_input("Flight IATA Number")
-                if st.button("Start Flight Trip"):
-                    if start_trip("flight", {"flight_iata": flight_iata}):
-                        st.success("Flight trip started.")
-                    else:
-                        st.error("Failed to start flight trip.")
-            # TODO: Add forms for Train and Road trips
+    if "session_hash" in st.session_state:
+        st.subheader("Live Tracking")
+        st.write(f"Session Hash: {st.session_state.session_hash}")
 
-        if "session_hash" in st.session_state:
-            st.subheader("Live Tracking")
-            st.write(f"Session Hash: {st.session_state.session_hash}")
+        # TODO: Implement browser API integration for live location and battery data.
+        st.warning("Live location and battery data are not yet implemented in the browser. This is a work in progress.")
 
-            # TODO: Implement browser API integration for live location and battery data.
-            st.warning("Live location and battery data are not yet implemented in the browser.")
+        # Send heartbeat
+        if "last_heartbeat" not in st.session_state or time.time() - st.session_state.last_heartbeat > 30:
+            requests.post(f"{API_URL}/heartbeat", headers=get_headers())
+            st.session_state.last_heartbeat = time.time()
 
-            # Send heartbeat
-            if "last_heartbeat" not in st.session_state or time.time() - st.session_state.last_heartbeat > 30:
-                requests.post(f"{API_URL}/heartbeat", headers=get_headers())
-                st.session_state.last_heartbeat = time.time()
-
-            # This is a placeholder for real location data
-            update_location(34.0522, -118.2437, 80.0)
-
-if __name__ == "__main__":
-    main()
+        # This is a placeholder for real location data
+        update_location(34.0522, -118.2437, 80.0)

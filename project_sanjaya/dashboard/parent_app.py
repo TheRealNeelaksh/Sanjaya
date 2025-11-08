@@ -6,16 +6,6 @@ import os
 
 API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
 
-st.set_page_config(layout="wide")
-
-def login_user(username, password):
-    response = requests.post(f"{API_URL}/login", json={"username": username, "password": password})
-    if response.status_code == 200:
-        st.session_state.token = response.json()["access_token"]
-        st.session_state.username = username
-        return True
-    return False
-
 def get_headers():
     return {"Authorization": f"Bearer {st.session_state.token}"}
 
@@ -46,38 +36,24 @@ def display_map(locations):
 
 def main():
     st.title("Parent Dashboard")
+    st.subheader(f"Welcome, {st.session_state.username}!")
 
-    if 'token' not in st.session_state:
-        st.subheader("Login")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if login_user(username, password):
-                st.rerun()
-            else:
-                st.error("Invalid credentials.")
-    else:
-        st.subheader(f"Welcome, {st.session_state.username}!")
+    children = get_linked_children()
+    selected_child = st.selectbox("Select a child to track:", children)
 
-        children = get_linked_children()
-        selected_child = st.selectbox("Select a child to track:", children)
+    if selected_child:
+        child_status = get_child_status(selected_child)
 
-        if selected_child:
-            child_status = get_child_status(selected_child)
-
-            if child_status:
-                col1, col2 = st.columns(2)
-                with col1:
-                    if child_status["latitude"] and child_status["longitude"]:
-                        display_map([{"lat": child_status["latitude"], "lon": child_status["longitude"]}])
-                    else:
-                        st.warning("No location data available.")
-                with col2:
-                    st.metric("Connection Status", child_status["connection_status"])
-                    st.metric("Last Seen", child_status["last_seen"])
-                    st.metric("Battery", f"{child_status['battery']}%" if child_status['battery'] else "N/A")
-            else:
-                st.error("Could not retrieve child status.")
-
-if __name__ == "__main__":
-    main()
+        if child_status:
+            col1, col2 = st.columns(2)
+            with col1:
+                if child_status["latitude"] and child_status["longitude"]:
+                    display_map([{"lat": child_status["latitude"], "lon": child_status["longitude"]}])
+                else:
+                    st.warning("No location data available.")
+            with col2:
+                st.metric("Connection Status", child_status["connection_status"])
+                st.metric("Last Seen", child_status["last_seen"])
+                st.metric("Battery", f"{child_status['battery']}%" if child_status['battery'] else "N/A")
+        else:
+            st.error("Could not retrieve child status.")
