@@ -10,6 +10,7 @@ from project_sanjaya.backend.auth import admin_user_exists, register_user
 def init_db():
     """Creates all database tables."""
     Base.metadata.create_all(bind=engine)
+    print("Database initialized.")
 
 def create_admin_if_not_exists():
     """Checks if an admin user exists and creates one if not."""
@@ -18,6 +19,8 @@ def create_admin_if_not_exists():
         print("Admin user not found. Creating a new one with default credentials...")
         register_user(db, "neelaksh", "neelakshisadmin", "admin")
         print("Admin user 'neelaksh' created successfully.")
+    else:
+        print("Admin user already exists.")
     db.close()
 
 def run_commands():
@@ -25,13 +28,12 @@ def run_commands():
     Launches the backend server, ngrok tunnel, and the main Streamlit dashboard.
     """
     backend_cmd = "uvicorn project_sanjaya.backend.app:app --host 0.0.0.0 --port 8000"
-    ngrok_cmd = "python project_sanjaya.scripts.ngrok_helper"
+    ngrok_cmd = "python -u -m project_sanjaya.scripts.ngrok_helper"
     main_app_cmd = "streamlit run project_sanjaya/dashboard/main_app.py --server.port 8501"
 
     processes = {}
     print("🚀 Starting backend and ngrok services...")
 
-    # Set process creation flags for Windows
     creationflags = 0
     preexec_fn = None
     if sys.platform == "win32":
@@ -39,7 +41,6 @@ def run_commands():
     else:
         preexec_fn = os.setsid
 
-    # Start backend and ngrok
     processes["Backend"] = subprocess.Popen(
         backend_cmd.split(),
         stdout=subprocess.PIPE,
@@ -49,38 +50,39 @@ def run_commands():
     )
     print(f"  -> Started Backend (PID: {processes['Backend'].pid})")
 
+    print("Attempting to start ngrok...")
     processes["Ngrok"] = subprocess.Popen(
         ngrok_cmd.split(),
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT, # Merge stderr into stdout
         creationflags=creationflags,
         preexec_fn=preexec_fn,
     )
     print(f"  -> Started Ngrok (PID: {processes['Ngrok'].pid})")
 
     try:
-        # Wait for ngrok URL
         ngrok_url = ""
         start_time = time.time()
-        while time.time() - start_time < 20: # 20 second timeout
+        print("--- Reading ngrok process output ---")
+        while time.time() - start_time < 20:
             line = processes["Ngrok"].stdout.readline()
             if not line:
-                break
+                time.sleep(0.5)
+                continue
             line_str = line.decode('utf-8').strip()
-            print(line_str)
+            print(f"ngrok: {line_str}") # Print every line from ngrok
             if "ngrok tunnel available at" in line_str:
                 ngrok_url = line_str.split("at ")[-1]
+                print(f"--- Found ngrok URL: {ngrok_url} ---")
                 break
 
         if not ngrok_url:
             print("\n❌ ERROR: Could not get ngrok URL after 20 seconds.")
-            print("Please check your ngrok configuration and internet connection.")
-            # Terminate already running processes
+            print("Please check the ngrok output above for errors.")
             for name, process in processes.items():
                 process.terminate()
             sys.exit(1)
 
-        # Set API_URL and start Streamlit app
         env = os.environ.copy()
         env["API_URL"] = ngrok_url
         print(f"\n🚀 Starting Streamlit dashboard with API_URL: {ngrok_url}")
@@ -96,10 +98,7 @@ def run_commands():
         print(f"  -> Started Main App (PID: {processes['Main App'].pid})")
 
         print("\n✅ All services are running!")
-        print("\n--- Access URL ---")
-        print("Main Dashboard: http://localhost:8501")
-        print("--------------------")
-        print("\nBackend server logs and ngrok URL will be in the terminal where you ran this script.")
+        print(f"Main Dashboard: http://localhost:8501")
         print("Press Ctrl+C to shut down all services.")
 
         while True:
@@ -117,7 +116,7 @@ def run_commands():
                 process.wait(timeout=5)
                 print(f"  -> Terminated {name}")
             except (ProcessLookupError, TimeoutExpired, OSError):
-                pass # Process already terminated
+                pass
         print("✅ Shutdown complete.")
         sys.exit(0)
 
