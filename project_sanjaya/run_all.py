@@ -5,31 +5,45 @@ import os
 import signal
 from project_sanjaya.backend.database import SessionLocal, engine
 from project_sanjaya.backend.models import Base
-from project_sanjaya.backend.auth import admin_user_exists, register_user
+from project_sanjaya.backend.auth import register_user
+from project_sanjaya.backend.models import User
+
 
 def init_db():
     """Creates all database tables."""
     Base.metadata.create_all(bind=engine)
     print("Database initialized.")
 
-def create_admin_if_not_exists():
-    """Checks if an admin user exists and creates one if not."""
+
+def create_admin(force_reset=False):
+    """Creates or resets the admin user."""
     db = SessionLocal()
-    if not admin_user_exists(db):
-        print("Admin user not found. Creating a new one with default credentials...")
-        register_user(db, "neelaksh", "neelakshisadmin", "admin")
-        print("Admin user 'neelaksh' created successfully.")
-    else:
+    existing = db.query(User).filter(User.username == "neelaksh").first()
+
+    if existing and not force_reset:
         print("Admin user already exists.")
+        db.close()
+        return
+
+    if existing and force_reset:
+        print("Resetting existing admin user...")
+        db.query(User).filter(User.username == "neelaksh").delete()
+        db.commit()
+
+    print("Creating admin user with default credentials...")
+    register_user(db, "neelaksh", "neelakshisadmin", "admin")
+    db.commit()
+    print("✅ Admin user 'neelaksh' created successfully.")
     db.close()
+
 
 def run_commands():
     """
     Launches the backend server, ngrok tunnel, and the main Streamlit dashboard.
     """
-    backend_cmd = "uvicorn project_sanjaya.backend.app:app --host 0.0.0.0 --port 8000"
-    ngrok_cmd = "python -u -m project_sanjaya.scripts.ngrok_helper"
-    main_app_cmd = "streamlit run project_sanjaya/dashboard/main_app.py --server.port 8501"
+    backend_cmd = ["uvicorn", "project_sanjaya.backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ngrok_cmd = [sys.executable, "-u", "-m", "project_sanjaya.scripts.ngrok_helper"]
+    main_app_cmd = ["streamlit", "run", "project_sanjaya/dashboard/main_app.py", "--server.port", "8501"]
 
     processes = {}
     print("🚀 Starting backend and ngrok services...")
@@ -41,8 +55,9 @@ def run_commands():
     else:
         preexec_fn = os.setsid
 
+    # --- Backend ---
     processes["Backend"] = subprocess.Popen(
-        backend_cmd.split(),
+        backend_cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         creationflags=creationflags,
@@ -50,11 +65,12 @@ def run_commands():
     )
     print(f"  -> Started Backend (PID: {processes['Backend'].pid})")
 
+    # --- Ngrok ---
     print("Attempting to start ngrok...")
     processes["Ngrok"] = subprocess.Popen(
-        ngrok_cmd.split(),
+        ngrok_cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, # Merge stderr into stdout
+        stderr=subprocess.STDOUT,  # Merge stderr into stdout
         creationflags=creationflags,
         preexec_fn=preexec_fn,
     )
@@ -69,8 +85,8 @@ def run_commands():
             if not line:
                 time.sleep(0.5)
                 continue
-            line_str = line.decode('utf-8').strip()
-            print(f"ngrok: {line_str}") # Print every line from ngrok
+            line_str = line.decode("utf-8", errors="ignore").strip()
+            print(f"ngrok: {line_str}")
             if "ngrok tunnel available at" in line_str:
                 ngrok_url = line_str.split("at ")[-1]
                 print(f"--- Found ngrok URL: {ngrok_url} ---")
@@ -87,8 +103,9 @@ def run_commands():
         env["API_URL"] = ngrok_url
         print(f"\n🚀 Starting Streamlit dashboard with API_URL: {ngrok_url}")
 
+        # --- Main App ---
         processes["Main App"] = subprocess.Popen(
-            main_app_cmd.split(),
+            main_app_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             creationflags=creationflags,
@@ -98,7 +115,7 @@ def run_commands():
         print(f"  -> Started Main App (PID: {processes['Main App'].pid})")
 
         print("\n✅ All services are running!")
-        print(f"Main Dashboard: http://localhost:8501")
+        print("Main Dashboard: http://localhost:8501")
         print("Press Ctrl+C to shut down all services.")
 
         while True:
@@ -115,12 +132,15 @@ def run_commands():
                 process.terminate()
                 process.wait(timeout=5)
                 print(f"  -> Terminated {name}")
-            except (ProcessLookupError, TimeoutExpired, OSError):
+            except (ProcessLookupError, subprocess.TimeoutExpired, OSError):
                 pass
         print("✅ Shutdown complete.")
         sys.exit(0)
 
+
 if __name__ == "__main__":
     init_db()
-    create_admin_if_not_exists()
+    # Set to True to reset the admin user every time (for development)
+    # Set to False once everything is working
+    create_admin(force_reset=True)
     run_commands()
