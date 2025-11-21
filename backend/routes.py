@@ -603,3 +603,26 @@ async def get_all_trips(
             for t in trips
         ]
     }
+
+
+@router.get("/admin/geofences")
+async def get_all_geofences(
+    current_user: User = Depends(require_role([RoleEnum.admin])),
+    db: Session = Depends(get_db)
+):
+    """Get all geofences (admin only)"""
+    geofences = db.query(Geofence).join(User).all()
+    
+    return {
+        "geofences": [
+            {
+                "id": g.id,
+                "user": g.user.username,
+                "name": g.name,
+                "lat": g.lat,
+                "lon": g.lon,
+                "radius_m": g.radius_m
+            }
+            for g in geofences
+        ]
+    }
